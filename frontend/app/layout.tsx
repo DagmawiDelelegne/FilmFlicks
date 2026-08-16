@@ -19,6 +19,10 @@ export const metadata: Metadata = {
   icons: {
     icon: "/icon.svg",
   },
+  openGraph: {
+    title: "FilmFlicks",
+    description: "Discover movies, TV Shows and anime through personalized recommendations.",
+  }
 };
 
 export default function RootLayout({

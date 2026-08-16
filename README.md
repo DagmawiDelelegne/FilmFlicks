@@ -1,4 +1,3 @@
-# 447-movies-shows-anime-swipe
 # FilmFlicks – Movie, TV, and Anime Discovery App
 
 FilmFlicks is a swipe-based media discovery web application that helps users find movies, TV shows, and anime tailored to their preferences. Users can like or dislike recommendations, and the system adapts to provide better suggestions over time.
@@ -53,8 +52,8 @@ Database
 
 ## 1. Clone the Repository
 ``` bash
-git clone https://github.com/phenry3/447-movies-shows-anime-swipe.git
-cd  447-movies-shows-anime-swipe
+git clone https://github.com/DagmawiDelelegne/FilmFlicks.git
+cd  FilmFlicks
 ```
 
 ## 2. Backend Setup
@@ -87,5 +86,27 @@ npm run dev
 
 # Demo
 
-![Discovery Page](image-1.png)
-![Matches Page](image-2.png)
+![Discovery Page](docs/image-1.png)
+![Matches Page](docs/image-2.png)
+
+# Contributors and Contributions 
+
+FilmFlicks originated as a group project developed by:
+
+- [Dagmawi Delelegne](https://github.com/DagmawiDelelegne)
+- [Adrien Baumert](https://github.com/abaumer1)
+- [Phillip Henry](https://github.com/phenry3)
+- [Abdullah Gill](https://github.com/GillAbdullah)
+- [Nate Von Hagen](https://github.com/NateVonHagen)
+- [Kamal Korabathina](https://github.com/kkoraba1)
+
+### My Contributions
+
+Features were developed jointly, and no single contributor was solely responsible for the areas listed below.
+
+I was primarily responsible for:
+
+- Implementing user feedback through likes and dislikes
+- Integrating the frontend with the backend
+- Contributing to the Next.js user interface
+- Developing the FastAPI backend and API endpoints

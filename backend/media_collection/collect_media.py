@@ -11,6 +11,7 @@ token = os.getenv("TMDB_ACCESS_TOKEN")
 
 movie_url = "https://api.themoviedb.org/3/discover/movie"
 show_url = "https://api.themoviedb.org/3/discover/tv"
+tmdb_base_url = "https://api.themoviedb.org/3"
 poster_base_url = "https://image.tmdb.org/t/p/w500"
 
 TOTAL_MOVIES = 1000
@@ -72,34 +73,137 @@ def is_complete_show(show):
     return True
 
 
+def get_genre_map(media_type):
+    response = requests.get(
+        f"{tmdb_base_url}/genre/{media_type}/list",
+        headers=headers,
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return {
+        genre["id"]: genre["name"]
+        for genre in data["genres"]
+    }
+
+
+def get_genre_names(genre_ids, genres_by_id):
+    return [
+        genres_by_id[genre_id]
+        for genre_id in genre_ids
+        if genre_id in genres_by_id
+    ]
+
+
+def get_keywords(media_type, tmdb_id):
+    try:
+        response = requests.get(
+            f"{tmdb_base_url}/{media_type}/{tmdb_id}/keywords",
+            headers=headers,
+            timeout=30,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as error:
+        print(f"Keyword request failed for {media_type} {tmdb_id}: {error}")
+        return []
+
+    data = response.json()
+
+    keyword_results = data.get("keywords") or data.get("results") or []
+    return [
+        keyword["name"]
+        for keyword in keyword_results
+        if keyword.get("name")
+    ]
+
+
+def get_watch_providers(media_type, tmdb_id):
+    empty_providers = {
+        "flatrate": [],
+        "free": [],
+        "ads": [],
+        "rent": [],
+        "buy": [],
+    }
+
+    try:
+        response = requests.get(
+            f"{tmdb_base_url}/{media_type}/{tmdb_id}/watch/providers",
+            headers=headers,
+            timeout=30,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as error:
+        print(f"Watch provider request failed for {media_type} {tmdb_id}: {error}")
+        return empty_providers
+
+    data = response.json()
+    us_providers = data.get("results", {}).get("US", {})
+    watch_providers = {}
+
+    for provider_type in empty_providers:
+        providers = us_providers.get(provider_type, [])
+        watch_providers[provider_type] = [
+            provider["provider_name"]
+            for provider in providers
+            if provider.get("provider_name")
+        ]
+
+    return watch_providers
+
+
+def get_primary_streaming_service(watch_providers):
+    for provider_type in ("flatrate", "free", "ads", "rent", "buy"):
+        providers = watch_providers.get(provider_type, [])
+        if providers:
+            return providers[0]
+    return ""
+
+
 def normalize_movie(movie, is_anime):
+    watch_providers = get_watch_providers("movie", movie["id"])
+
     return {
         "tmdb_id": movie["id"],
         "media_type": "movie",
         "is_anime": is_anime,
         "title": movie["title"],
         "overview": movie["overview"],
-        "genres": movie["genre_ids"],
+        "genre_ids": movie["genre_ids"],
+        "genres": get_genre_names(movie["genre_ids"], movie_genres_by_id),
+        "keywords": get_keywords("movie", movie["id"]),
         "thumbnail_url": poster_base_url + movie["poster_path"],
         "release_date": movie["release_date"],
         "vote_average": movie["vote_average"],
         "vote_count": movie["vote_count"],
+        "popularity": movie.get("popularity", 0),
+        "original_language": movie.get("original_language", ""),
+        "watch_providers": watch_providers,
+        "primary_streaming_service": get_primary_streaming_service(watch_providers),
         "adult": movie.get("adult", False),
     }
 
 
 def normalize_show(show, is_anime):
+    watch_providers = get_watch_providers("tv", show["id"])
+
     return {
         "tmdb_id": show["id"],
         "media_type": "tv",
         "is_anime": is_anime,
         "title": show["name"],
         "overview": show["overview"],
-        "genres": show["genre_ids"],
+        "genre_ids": show["genre_ids"],
+        "genres": get_genre_names(show["genre_ids"], show_genres_by_id),
+        "keywords": get_keywords("tv", show["id"]),
         "thumbnail_url": poster_base_url + show["poster_path"],
         "release_date": show["first_air_date"],
         "vote_average": show["vote_average"],
         "vote_count": show["vote_count"],
+        "popularity": show.get("popularity", 0),
+        "original_language": show.get("original_language", ""),
+        "watch_providers": watch_providers,
+        "primary_streaming_service": get_primary_streaming_service(watch_providers),
         "adult": show.get("adult", False),
     }
 
@@ -243,6 +347,9 @@ def collect_anime(movies, shows, records_by_key):
                 show_pages_finished = True
             show_page += 1
 
+
+movie_genres_by_id = get_genre_map("movie")
+show_genres_by_id = get_genre_map("tv")
 
 movies = collect_movies()
 shows = collect_shows()

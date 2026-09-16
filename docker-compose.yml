@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: filmflicks-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: filmflicks
+      POSTGRES_PASSWORD: filmflicks
+      POSTGRES_DB: filmflicks
+    ports:
+      - "5434:5432"
+    volumes:
+      - filmflicks_postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: filmflicks-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@filmflicks.com
+      PGADMIN_DEFAULT_PASSWORD: filmflicks
+    ports:
+      - "5052:80"
+    volumes:
+      - filmflicks_pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+
+volumes:
+  filmflicks_postgres_data:
+  filmflicks_pgadmin_data:

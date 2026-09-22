@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import List, Literal
 
 MediaType = Literal["movie","tv"]
+OAuthProvider = Literal["google","github","instagram"]
 
 class MediaItem(BaseModel):
     title: str
@@ -14,3 +15,17 @@ class MediaItem(BaseModel):
     streaming_service: str = ""  
     is_anime: bool = False 
 
+class OAuthLoginIn(BaseModel):
+    provider: OAuthProvider
+    provider_user_id: str
+    email: str
+    email_verified: bool = False
+    name: str
+    picture: str = ""
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    email_verified: bool
+    name: str
+    picture: str

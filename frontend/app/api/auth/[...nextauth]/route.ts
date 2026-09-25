@@ -11,13 +11,37 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 
   callbacks: {
-    async jwt({ token, account, profile }) {
-      if (account) {
-        token.googleId = account.providerAccountId;
-      }
+    async jwt({token, account, profile }) {
+      
+      if (account && profile){
 
-      if (profile && "email_verified" in profile) {
-        token.emailVerified = Boolean(profile.email_verified);
+        const emailVerified = "email_verified" in profile ? Boolean(profile.email_verified) : false;
+
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/sync-user`,{
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "backend-internal-secret": process.env.BACKEND_INTERNAL_SECRET!,
+          },
+          body: JSON.stringify({
+            provider: account.provider,
+            provider_user_id: account.providerAccountId,
+            email: token.email,
+            email_verified: emailVerified, // used emailVerified because of typescript type issue
+            name: token.name ?? "",
+            picture: token.picture ?? "",
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to sync user with backend");
+        }
+
+        const user = await res.json();
+
+        token.userId = user.id;
+        token.googleId = account.providerAccountId;
+        token.emailVerified = user.email_verified;
       }
 
       return token;
@@ -25,6 +49,7 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       if (session.user) {
+        session.user.id = token.userId as number;
         session.user.googleId = token.googleId as string;
         session.user.emailVerified = token.emailVerified as boolean;
       }

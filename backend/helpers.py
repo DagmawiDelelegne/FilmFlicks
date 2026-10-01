@@ -12,6 +12,7 @@ def format_date(value: date | None) -> str:
 # Trimms the data to what frontend expects
 def media_to_api_item(media: Media) -> MediaItem :
     return MediaItem(
+        id=media.id,
         title=media.title,
         overview=media.overview,
         genres=media.genres or [],

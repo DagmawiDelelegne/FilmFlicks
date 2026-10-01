@@ -5,6 +5,7 @@ MediaType = Literal["movie","tv"]
 OAuthProvider = Literal["google","github","instagram"]
 
 class MediaItem(BaseModel):
+    id: int
     title: str
     overview: str = ""
     genres: List[str] = []
@@ -29,3 +30,7 @@ class UserOut(BaseModel):
     email_verified: bool
     name: str
     picture: str
+
+class LikePayload(BaseModel):
+    user_id: int
+    media_id: int

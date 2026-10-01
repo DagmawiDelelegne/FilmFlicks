@@ -8,7 +8,7 @@ from sqlalchemy import select, case, desc
 from dotenv import load_dotenv
 
 from schemas import MediaItem,OAuthLoginIn,UserOut
-from models import Media, User, UserAuthAccount
+from models import Media, User, UserAuthAccount, UserMediaFeedback, LikePayload
 from database import sessionLocal
 from helpers import media_to_api_item
 
@@ -138,3 +138,71 @@ def search(query: str, limit: int = Query(default=10, ge=1, le=50), db: Session 
     )
     media_results = db.scalars(statement).all()
     return [media_to_api_item(media) for media in media_results]
+
+
+# Provide ids of medias already liked by the user for search page
+@api.get("/api/likes/{user_id}/ids", response_model=list[int])
+def liked_ids(user_id: int, _: bool = Depends(require_internal_secret), db: Session= Depends(get_db)):
+    statement = (
+        select(UserMediaFeedback.media_id).where(
+            UserMediaFeedback.user_id == user_id,
+            UserMediaFeedback.feedback == "like",
+        )
+    )
+    return list(db.scalars(statement).all())
+
+# returns a list of MediaItems liked by the user
+@api.get("/api/likes/{user_id}", response_model=list[MediaItem])
+def liked_media(user_id: int,
+                _: bool = Depends(require_internal_secret),
+                db: Session = Depends(get_db)):
+
+    statement = (
+        select(Media)
+        .join(UserMediaFeedback, UserMediaFeedback.media_id == Media.id)
+        .where(
+            UserMediaFeedback.user_id == user_id,
+            UserMediaFeedback.feedback == "like",
+        )
+        .order_by(desc(UserMediaFeedback.created_at))
+    )
+
+    media_results = db.scalars(statement).all()
+    result = [media_to_api_item(media) for media in media_results]
+    return result
+
+# updates or addes to the user's feedback table
+@api.post("/api/likes/")
+def like_media(
+    payload: LikePayload,
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    feedback = db.get(UserMediaFeedback, (payload.user_id, payload.media_id))
+
+    if feedback:
+        feedback.feedback = "like"
+    else:
+        feedback = UserMediaFeedback(
+            user_id=payload.user_id,
+            media_id=payload.media_id,
+            feedback="like",
+        )
+        db.add(feedback)
+
+        db.commit()
+
+@api.delete("/api/likes/{user_id}/{media_id}")
+def unlike_media(
+    user_id: int,
+    media_id: int,
+    _: bool = Depends(require_internal_secret),
+    db : Session = Depends(get_db),
+):
+    feedback = db.get(UserMediaFeedback, user_id, media_id)
+
+    if feedback and feedback.feedback == "like":
+        db.delete(feedback)
+        db.commit()
+
+    return {"ok": True}

@@ -7,8 +7,8 @@ from sqlalchemy import select, case, desc
 
 from dotenv import load_dotenv
 
-from schemas import MediaItem,OAuthLoginIn,UserOut
-from models import Media, User, UserAuthAccount, UserMediaFeedback, LikePayload
+from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload
+from models import Media, User, UserAuthAccount, UserMediaFeedback
 from database import sessionLocal
 from helpers import media_to_api_item
 
@@ -172,7 +172,7 @@ def liked_media(user_id: int,
     return result
 
 # updates or addes to the user's feedback table
-@api.post("/api/likes/")
+@api.post("/api/likes")
 def like_media(
     payload: LikePayload,
     _: bool = Depends(require_internal_secret),
@@ -190,7 +190,8 @@ def like_media(
         )
         db.add(feedback)
 
-        db.commit()
+    db.commit()
+    return {"ok": True}
 
 @api.delete("/api/likes/{user_id}/{media_id}")
 def unlike_media(
@@ -199,7 +200,7 @@ def unlike_media(
     _: bool = Depends(require_internal_secret),
     db : Session = Depends(get_db),
 ):
-    feedback = db.get(UserMediaFeedback, user_id, media_id)
+    feedback = db.get(UserMediaFeedback, (user_id, media_id))
 
     if feedback and feedback.feedback == "like":
         db.delete(feedback)

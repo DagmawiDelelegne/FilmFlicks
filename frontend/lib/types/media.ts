@@ -1,5 +1,7 @@
 export type MediaItem = {
-    media_type : "movie" | "tv" | "anime";
+    id: number;
+    media_type : "movie" | "tv";
+    is_anime?: boolean;
     title : string;
     overview : string;
     genres : string[];
@@ -7,6 +9,10 @@ export type MediaItem = {
     release_date : string; 
     vote_average : number;
     streaming_service?: string;
+}
+
+export function getMediaDisplayType(item: MediaItem) {
+    return item.is_anime ? "ANIME" : item.media_type.toUpperCase();
 }
 
 

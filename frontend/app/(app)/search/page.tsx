@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SearchCard } from "@/components/SearchCard";
-import { searchMovies, sendFeedback, getLikedTitles } from "@/lib/api";
+import { searchMovies, getLikedMediaIds, likeMedia, unlikeMedia } from "@/lib/api";
 import { MediaItem } from "@/lib/types/media";
 import { useSession } from "next-auth/react";
 
@@ -11,24 +11,24 @@ export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [likedTitles, setLikedTitles] = useState<Set<string>>(new Set());
+  const [likedMediaIds, setLikedMediaIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     async function loadLikes() {
-      if (!session?.user?.googleId) return;
+      if (!session?.user?.id) return;
 
       try {
-        const liked = await getLikedTitles(session.user.googleId);
-        setLikedTitles(new Set(liked));
+        const liked = await getLikedMediaIds();
+        setLikedMediaIds(new Set(liked));
       } catch (err) {
-        console.error("Failed to load liked titles:", err);
+        console.error("Failed to load liked media ids:", err);
       }
     }
 
     if (status === "authenticated") {
       loadLikes();
     }
-  }, [status, session?.user?.googleId]);
+  }, [status, session?.user?.id]);
 
   useEffect(() => {
     const delay = setTimeout(() => {
@@ -54,22 +54,40 @@ export default function SearchPage() {
   }, [query]);
 
   async function handleLike(item: MediaItem) {
-    if (!session?.user?.googleId) return;
+    if (!session?.user?.id) return;
 
-    setLikedTitles((prev) => new Set(prev).add(item.title));
+    const alreadyLiked = likedMediaIds.has(item.id);
+
+    setLikedMediaIds((prev) => {
+      const updated = new Set(prev);
+
+      if (alreadyLiked) {
+        updated.delete(item.id);
+      } else {
+        updated.add(item.id);
+      }
+
+      return updated;
+    });
 
     try {
-      await sendFeedback({
-        google_id: session.user.googleId,
-        title: item.title,
-        action: "like",
-      });
+      if (alreadyLiked) {
+        await unlikeMedia(item.id);
+      } else {
+        await likeMedia(item.id);
+      }
     } catch (err) {
-      console.error("Failed to like item:", err);
+      console.error("Failed to update like:", err);
 
-      setLikedTitles((prev) => {
+      setLikedMediaIds((prev) => {
         const updated = new Set(prev);
-        updated.delete(item.title);
+
+        if (alreadyLiked) {
+          updated.add(item.id);
+        } else {
+          updated.delete(item.id);
+        }
+
         return updated;
       });
     }
@@ -95,11 +113,11 @@ export default function SearchPage() {
         {/* Results */}
         <div className="mt-6 flex flex-col gap-4">
           {results.map((item) => {
-            const isLiked = likedTitles.has(item.title);
+            const isLiked = likedMediaIds.has(item.id);
 
             return (
               <SearchCard
-                key={`${item.title}-${item.release_date}`}
+                key={item.id}
                 item={item}
                 onLike={handleLike}
                 liked={isLiked}

@@ -1,4 +1,4 @@
-import { MediaItem, FeedbackPaylaod, RemoveMatchPayload } from "./types/media";
+import { MediaItem, FeedbackPaylaod, RemoveMatchPayload, PaginatedMediaResponse } from "./types/media";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -24,7 +24,15 @@ export async function getMatches(_google_id: string): Promise<MediaItem[]> {
     if(!res.ok) throw new Error(`get Matches failed: ${res.status}`);
     return res.json();
 }
+export async function getLikedMedia(page: number, limit = 10): Promise<PaginatedMediaResponse> {
 
+  const res = await fetch(`/api/likes?page=${page}&limit=${limit}`,{cache: "no-store"},);
+  if (!res.ok){
+    throw new Error("Failed to fetch liked media");
+  }
+  
+  return res.json();
+}
 export async function removeMatch(_payload: RemoveMatchPayload): Promise<void> {
     const res = await fetch("/api/matches", {
         method: "DELETE",
@@ -41,9 +49,9 @@ export async function unlikeMedia(mediaId: number): Promise<void> {
     if (!res.ok) throw new Error(`unlikeMedia failed: ${res.status}`);
 }
 
-export async function searchMovies(query: string) {
+export async function searchMovies(query: string, page: number, limit = 10): Promise<PaginatedMediaResponse> {
   const res = await fetch(
-    `${BASE_URL}/api/search?query=${encodeURIComponent(query)}&limit=10`
+    `${BASE_URL}/api/search?query=${encodeURIComponent(query)}&page=${page}&limit=10`
   );
 
   if (!res.ok) {

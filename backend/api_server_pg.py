@@ -7,7 +7,7 @@ from sqlalchemy import select, case, desc
 
 from dotenv import load_dotenv
 
-from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload
+from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload, PaginatedMediaResponse
 from models import Media, User, UserAuthAccount, UserMediaFeedback
 from database import sessionLocal
 from helpers import media_to_api_item
@@ -113,8 +113,8 @@ def sync_user(payload: OAuthLoginIn,
 """
 Search media by title
 """
-@api.get("/api/search", response_model=list[MediaItem])
-def search(query: str, limit: int = Query(default=10, ge=1, le=50), db: Session = Depends(get_db)):
+@api.get("/api/search", response_model=PaginatedMediaResponse)
+def search(query: str, page: int = Query(default=1, ge=1), limit: int = Query(default=10, ge=1, le=50), db: Session = Depends(get_db)):
     query = query.strip()
 
     if not query:
@@ -122,6 +122,7 @@ def search(query: str, limit: int = Query(default=10, ge=1, le=50), db: Session 
 
     search_text = f"%{query}%"
     starts_with = f"{query}%"
+    offset = (page - 1) * limit
 
     statement = (
         select(Media)
@@ -134,10 +135,19 @@ def search(query: str, limit: int = Query(default=10, ge=1, le=50), db: Session 
         desc(Media.popularity),
         desc(Media.vote_count),
         )
-        .limit(limit)
+        .offset(offset)
+        .limit(limit + 1)
     )
     media_results = db.scalars(statement).all()
-    return [media_to_api_item(media) for media in media_results]
+    has_next = len(media_results) > limit
+    page_items = media_results[:limit]
+
+    return PaginatedMediaResponse(
+        items=[media_to_api_item(media) for media in page_items],
+        page=page,
+        limit=limit,
+        has_next=has_next,
+    )
 
 
 # Provide ids of medias already liked by the user for search page
@@ -152,11 +162,13 @@ def liked_ids(user_id: int, _: bool = Depends(require_internal_secret), db: Sess
     return list(db.scalars(statement).all())
 
 # returns a list of MediaItems liked by the user
-@api.get("/api/likes/{user_id}", response_model=list[MediaItem])
+@api.get("/api/likes/{user_id}", response_model=PaginatedMediaResponse)
 def liked_media(user_id: int,
+                page : int = Query(default=1, ge=1),
+                limit : int = Query(default=10, ge=1, le=50),
                 _: bool = Depends(require_internal_secret),
                 db: Session = Depends(get_db)):
-
+    offset = (page - 1) * limit
     statement = (
         select(Media)
         .join(UserMediaFeedback, UserMediaFeedback.media_id == Media.id)
@@ -165,11 +177,19 @@ def liked_media(user_id: int,
             UserMediaFeedback.feedback == "like",
         )
         .order_by(desc(UserMediaFeedback.created_at))
+        .offset(offset)
+        .limit(limit+1)
     )
 
     media_results = db.scalars(statement).all()
-    result = [media_to_api_item(media) for media in media_results]
-    return result
+    has_next = len(media_results) > limit
+    page_items = media_results[:limit]
+    return PaginatedMediaResponse(
+        items=[media_to_api_item(media) for media in page_items],
+        page=page,
+        limit=limit,
+        has_next=has_next,
+    )
 
 # updates or addes to the user's feedback table
 @api.post("/api/likes")

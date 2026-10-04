@@ -16,6 +16,12 @@ class MediaItem(BaseModel):
     streaming_service: str = ""  
     is_anime: bool = False 
 
+class PaginatedMediaResponse(BaseModel):
+    items: list[MediaItem]
+    page: int
+    limit: int
+    has_next: bool
+
 class OAuthLoginIn(BaseModel):
     provider: OAuthProvider
     provider_user_id: str

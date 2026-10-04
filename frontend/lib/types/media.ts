@@ -26,3 +26,10 @@ export type RemoveMatchPayload = {
     google_id : string;
     title : string;
 };
+
+export type PaginatedMediaResponse = {
+    items: MediaItem[];
+    page: number;
+    limit: number;
+    has_next: boolean;
+}

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Film, Tags, X } from "lucide-react";
-import type { MediaItem } from "@/lib/types/media";
+import { CalendarDays, Film, Play, Star, Tags, X } from "lucide-react";
+import { getMediaDisplayType, type MediaItem } from "@/lib/types/media";
 
 function DetailInfo({
   icon,
@@ -15,19 +15,19 @@ function DetailInfo({
 }) {
   return (
     <div
-      className={`h-full min-h-[104px] rounded-2xl border border-white/10 p-4 ${
+      className={`h-full min-h-[76px] rounded-xl border border-white/10 p-3 ${
         opaque ? "bg-[#161616]" : "bg-white/[0.03]"
       }`}
     >
-      <div className="flex h-full items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/5 text-white/75 ring-1 ring-white/10">
+      <div className="flex h-full items-center gap-2.5">
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/5 text-white/75 ring-1 ring-white/10">
           {icon}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-[0.22em] text-white/45">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">
             {label}
           </p>
-          <p className="mt-1 line-clamp-2 break-words text-sm leading-6 font-medium text-white/90">
+          <p className="mt-0.5 line-clamp-2 break-words text-sm leading-5 font-medium text-white/90">
             {value}
           </p>
         </div>
@@ -51,6 +51,10 @@ export function DetailsCard({
 }: DetailsCardProps) {
   const overview = item.overview?.trim() || "Unknown";
   const genres = item.genres.length > 0 ? item.genres.join(", ") : "Unknown";
+  const streamingService = item.streaming_service?.trim() || "Not listed";
+  const releaseDate = item.release_date?.trim() || "Unknown";
+  const rating =
+    item.vote_average > 0 ? `${item.vote_average.toFixed(1)} / 10` : "Unknown";
 
   return (
     <article
@@ -86,11 +90,29 @@ export function DetailsCard({
           </p>
         </div>
 
-        <div className="grid w-full gap-3 sm:auto-rows-fr sm:grid-cols-2 lg:w-[24rem] lg:flex-none lg:grid-cols-1">
+        <div className="grid w-full gap-2.5 sm:auto-rows-fr sm:grid-cols-2 lg:w-[20rem] lg:flex-none lg:grid-cols-1">
           <DetailInfo
             icon={<Film className="h-4 w-4" />}
             label="Format"
-            value={item.media_type.toUpperCase()}
+            value={getMediaDisplayType(item)}
+            opaque={opaque}
+          />
+          <DetailInfo
+            icon={<Play className="h-4 w-4" />}
+            label="Streaming"
+            value={streamingService}
+            opaque={opaque}
+          />
+          <DetailInfo
+            icon={<CalendarDays className="h-4 w-4" />}
+            label="Released"
+            value={releaseDate}
+            opaque={opaque}
+          />
+          <DetailInfo
+            icon={<Star className="h-4 w-4" />}
+            label="Rating"
+            value={rating}
             opaque={opaque}
           />
           <DetailInfo

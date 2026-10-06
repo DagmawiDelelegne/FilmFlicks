@@ -22,11 +22,6 @@ export type FeedbackPaylaod ={
     action : "like" | "dislike";
 };
 
-export type RemoveMatchPayload = {
-    google_id : string;
-    title : string;
-};
-
 export type PaginatedMediaResponse = {
     items: MediaItem[];
     page: number;

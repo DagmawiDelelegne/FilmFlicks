@@ -1,4 +1,4 @@
-import { MediaItem, FeedbackPaylaod, RemoveMatchPayload, PaginatedMediaResponse } from "./types/media";
+import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse } from "./types/media";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -19,11 +19,6 @@ export async function sendFeedback(payload: FeedbackPaylaod): Promise<MediaItem>
         return res.json();
 }
 
-export async function getMatches(_google_id: string): Promise<MediaItem[]> {
-    const res = await fetch("/api/matches", {cache:"no-store"});
-    if(!res.ok) throw new Error(`get Matches failed: ${res.status}`);
-    return res.json();
-}
 export async function getLikedMedia(page: number, limit = 10): Promise<PaginatedMediaResponse> {
 
   const res = await fetch(`/api/likes?page=${page}&limit=${limit}`,{cache: "no-store"},);
@@ -32,13 +27,6 @@ export async function getLikedMedia(page: number, limit = 10): Promise<Paginated
   }
   
   return res.json();
-}
-export async function removeMatch(_payload: RemoveMatchPayload): Promise<void> {
-    const res = await fetch("/api/matches", {
-        method: "DELETE",
-    });
-
-    if (!res.ok) throw new Error(`removeMatch failed: ${res.status}`);
 }
 
 export async function unlikeMedia(mediaId: number): Promise<void> {
@@ -51,7 +39,7 @@ export async function unlikeMedia(mediaId: number): Promise<void> {
 
 export async function searchMovies(query: string, page: number, limit = 10): Promise<PaginatedMediaResponse> {
   const res = await fetch(
-    `${BASE_URL}/api/search?query=${encodeURIComponent(query)}&page=${page}&limit=10`
+    `${BASE_URL}/api/search?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`
   );
 
   if (!res.ok) {

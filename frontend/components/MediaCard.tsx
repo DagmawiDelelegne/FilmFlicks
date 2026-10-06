@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import type { MediaItem } from "@/lib/types/media";
+import { getMediaDisplayType, type MediaItem } from "@/lib/types/media";
 
 type MediaCardProps = {
   item: MediaItem;
@@ -60,7 +60,7 @@ export function MediaCard({ item, onClick, disableLink = false }: MediaCardProps
         <h2 className="text-4xl font-bold leading-tight">{item.title}</h2>
 
         <p className="mt-1 text-sm text-white/70">
-          {item.media_type.toUpperCase()}
+          {getMediaDisplayType(item)}
         </p>
 
         <div className="mt-3 flex flex-wrap gap-2">

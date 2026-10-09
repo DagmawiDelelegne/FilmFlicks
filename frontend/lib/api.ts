@@ -3,20 +3,19 @@ import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse } from "./types/medi
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 
-export async function getRec(google_id: string) : Promise<MediaItem> {
-    const res = await fetch(`${BASE_URL}/api/rec/${google_id}`, {cache:"no-store"});
+export async function getRec(limit = 10): Promise<MediaItem[]> {
+    const res = await fetch(`/api/rec?limit=${limit}`, {cache:"no-store"});
     if (!res.ok) throw new Error(`getRec failed: ${res.status}`);
   return res.json();
 }
 
-export async function sendFeedback(payload: FeedbackPaylaod): Promise<MediaItem> {
-    const res = await fetch(`${BASE_URL}/api/feedback`, 
+export async function sendFeedback(payload: FeedbackPaylaod): Promise<void> {
+    const res = await fetch(`/api/feedback`, 
                 {method : "POST", 
                  headers: {"Content-Type": "application/json"}, 
                  body: JSON.stringify(payload),});
 
         if (!res.ok) throw new Error(`sendFeedback failed: ${res.status}`);
-        return res.json();
 }
 
 export async function getLikedMedia(page: number, limit = 10): Promise<PaginatedMediaResponse> {
@@ -64,16 +63,14 @@ export async function likeMedia(mediaId: number): Promise<void> {
   if (!res.ok) throw new Error("Failed to like media");
 }
 
-export async function getLikedCount(userId: string): Promise<number> {
-  const res = await fetch(`http://localhost:8000/api/likes/count/${userId}`);
+export async function getLikedCount(): Promise<number> {
+  const res = await fetch(`/api/likes/count`);
   if (!res.ok) throw new Error("Failed to fetch liked count");
   const data = await res.json();
   return data.count;
 }
 
-export async function undoFeedback(googleId: string): Promise<MediaItem> {
-  const res = await fetch (`${BASE_URL}/api/undo/${googleId}`);
+export async function undoFeedback(): Promise<void> {
+  const res = await fetch (`/api/undo`, {method: "POST"});
   if (!res.ok) throw new Error (`undoFeedback failed : ${res.status}`);
-  const media = await res.json();
-  return media;
 }

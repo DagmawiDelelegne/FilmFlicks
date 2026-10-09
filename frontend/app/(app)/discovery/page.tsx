@@ -9,21 +9,34 @@ import { getRec, sendFeedback, getLikedCount, undoFeedback } from "@/lib/api";
 import { MediaItem } from "@/lib/types/media";
 import { useSession } from "next-auth/react";
 
+const RECOMMENDATION_BATCH_SIZE = 10;
+const QUEUE_REFILL_THRESHOLD = 3;
+
+async function fetchRecommendationBatch(existingIds = new Set<number>()) {
+  const recommendations = await getRec(RECOMMENDATION_BATCH_SIZE);
+  return recommendations.filter((media) => !existingIds.has(media.id));
+}
+
 export default function DiscoveryPage() {
   const { data: session, status } = useSession();
 
   const [item, setItem] = useState<MediaItem | null>(null);
+  const [queue, setQueue] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [likedCount, setLikedCount] = useState<number | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [undoing, setUndoing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [lastFeedbackItem, setLastFeedbackItem] = useState<MediaItem | null>(
+    null
+  );
 
   useEffect(() => {
     async function loadCount() {
-      if (!session?.user?.googleId) return;
+      if (!session?.user?.id) return;
 
       try {
-        const count = await getLikedCount(session.user.googleId);
+        const count = await getLikedCount();
         setLikedCount(count);
       } catch (err) {
         console.error("Failed to load liked count:", err);
@@ -33,63 +46,115 @@ export default function DiscoveryPage() {
     if (status === "authenticated") {
       loadCount();
     }
-  }, [status, session?.user?.googleId]);
+  }, [status, session?.user?.id]);
 
   useEffect(() => {
-    async function loadRec() {
-      if (!session?.user?.googleId) return;
+    let cancelled = false;
+
+    async function loadRecommendations() {
+      if (!session?.user?.id) return;
       if (likedCount === null || likedCount < 5) return;
 
       setLoading(true);
+
       try {
-        const rec = await getRec(session.user.googleId);
-        setItem(rec);
+        const recommendations = await fetchRecommendationBatch();
+        if (cancelled) return;
+
+        const [first, ...rest] = recommendations;
+        setItem(first ?? null);
+        setQueue(rest);
+      } catch (err) {
+        console.error("Failed to load recommendations:", err);
+        if (!cancelled) {
+          setItem(null);
+          setQueue([]);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     if (status === "authenticated") {
-      loadRec();
+      loadRecommendations();
     }
-  }, [status, session?.user?.googleId, likedCount]);
 
-  async function dislike() {
-    if (!item || !session?.user?.googleId) return;
-    const next = await sendFeedback({
-      google_id: session.user.googleId,
-      title: item.title,
-      action: "dislike",
-    });
-    setItem(next);
-    setCanUndo(true);
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session?.user?.id, likedCount]);
+
+  async function handleFeedback(action: "like" | "dislike") {
+    if (!item || !session?.user?.id || submitting) return;
+
+    const feedbackItem = item;
+    setSubmitting(true);
+
+    try {
+      await sendFeedback({
+        media_id: feedbackItem.id,
+        action,
+      });
+
+      const [nextFromQueue, ...remainingQueue] = queue;
+      let nextItem = nextFromQueue ?? null;
+      let nextQueue = remainingQueue;
+
+      if (!nextItem || nextQueue.length <= QUEUE_REFILL_THRESHOLD) {
+        const existingIds = new Set(nextQueue.map((media) => media.id));
+
+        if (nextItem) {
+          existingIds.add(nextItem.id);
+        }
+
+        const moreRecommendations = await fetchRecommendationBatch(existingIds);
+
+        if (!nextItem) {
+          const [firstMore, ...restMore] = moreRecommendations;
+          nextItem = firstMore ?? null;
+          nextQueue = restMore;
+        } else {
+          nextQueue = [...nextQueue, ...moreRecommendations];
+        }
+      }
+
+      setLastFeedbackItem(feedbackItem);
+      setItem(nextItem);
+      setQueue(nextQueue);
+      setCanUndo(true);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  async function like() {
-    if (!item || !session?.user?.googleId) return;
-    const next = await sendFeedback({
-      google_id: session.user.googleId,
-      title: item.title,
-      action: "like",
-    });
-    setItem(next);
-    setCanUndo(true);
-  }
+  async function undo() {
+    if (!canUndo || undoing || !lastFeedbackItem) return;
 
-
-  async function undo(){
-    if (!canUndo || undoing) return;
-    if (!session?.user?.googleId) return;
     setUndoing(true);
-    try{
-      const undon = await undoFeedback(session.user.googleId);
-      setItem(undon);
+
+    try {
+      await undoFeedback();
+
+      const currentItem = item;
+      setItem(lastFeedbackItem);
+      setQueue((currentQueue) =>
+        currentItem ? [currentItem, ...currentQueue] : currentQueue
+      );
+      setLastFeedbackItem(null);
       setCanUndo(false);
-    }
-    finally{
+    } finally {
       setUndoing(false);
     }
-    
+  }
+
+  if (status === "unauthenticated") {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        Please sign in to use discovery.
+      </main>
+    );
   }
 
   if (likedCount !== null && likedCount < 5) {
@@ -100,7 +165,7 @@ export default function DiscoveryPage() {
             Please search and select at least 5 movies
           </h1>
           <p className="mt-2 text-white/60">
-            You’ve selected {likedCount} so far
+            You've selected {likedCount} so far
           </p>
         </div>
       </main>
@@ -129,25 +194,31 @@ export default function DiscoveryPage() {
           <MediaCard item={item} disableLink />
         </div>
 
-        <div className="mt-4  flex items-center gap-10">
+        <div className="mt-4 flex items-center gap-10">
           <button
-            onClick={dislike}
-            className="grid h-15 w-15 place-items-center rounded-full bg-red-600/90 text-3xl shadow-lg ring-1 ring-white/10 cursor-pointer"
+            onClick={() => handleFeedback("dislike")}
+            disabled={submitting || undoing}
+            className="grid h-15 w-15 place-items-center rounded-full bg-red-600/90 text-3xl shadow-lg ring-1 ring-white/10 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Dislike"
           >
             <X className={iconClass} />
           </button>
 
           <button
-            onClick={like}
-            className="grid h-15 w-15 place-items-center rounded-full bg-green-600/90 text-3xl shadow-lg ring-1 ring-white/10 cursor-pointer"
+            onClick={() => handleFeedback("like")}
+            disabled={submitting || undoing}
+            className="grid h-15 w-15 place-items-center rounded-full bg-green-600/90 text-3xl shadow-lg ring-1 ring-white/10 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Like"
           >
             <Heart className={iconClass} />
           </button>
         </div>
 
-        <UndoButton disabled={!canUndo} loading={undoing} onClick={undo} />
+        <UndoButton
+          disabled={!canUndo || submitting}
+          loading={undoing}
+          onClick={undo}
+        />
 
         <div className="mt-6 w-full mb-6">
           <DetailsCard item={item} />

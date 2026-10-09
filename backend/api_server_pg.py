@@ -3,15 +3,15 @@ import secrets
 from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import select, case, desc
+from sqlalchemy import select, case, desc, func
 
 from dotenv import load_dotenv
 
-from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload, PaginatedMediaResponse
-from models import Media, User, UserAuthAccount, UserMediaFeedback
+from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload, PaginatedMediaResponse, FeedbackPayload
+from models import Media, User, UserAuthAccount, UserMediaFeedback, LatestFeedback
 from database import sessionLocal
 from helpers import media_to_api_item
-
+from recommender import get_recommendations
 
 api = FastAPI()
 
@@ -213,12 +213,103 @@ def like_media(
     db.commit()
     return {"ok": True}
 
+@api.get("/api/likes/{user_id}/count")
+def liked_count(
+    user_id: int,
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    count = db.scalar(
+        select(func.count())
+        .select_from(UserMediaFeedback)
+        .where(
+            UserMediaFeedback.user_id == user_id,
+            UserMediaFeedback.feedback == "like",
+        )
+    )
+    return {"count": count or 0}
+
+
+@api.get("/api/rec/{user_id}", response_model=list[MediaItem])
+def recommended_media(
+    user_id: int,
+    limit: int = Query(default=10, ge=1, le=50),
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    recommendations = get_recommendations(user_id=user_id, db=db, limit=limit)
+    return [media_to_api_item(media) for media in recommendations]
+
+
+@api.post("/api/feedback")
+def save_feedback(
+    payload: FeedbackPayload,
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    media = db.get(Media, payload.media_id)
+
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    feedback = db.get(UserMediaFeedback, (payload.user_id, payload.media_id))
+
+    if feedback:
+        feedback.feedback = payload.feedback
+    else:
+        feedback = UserMediaFeedback(
+            user_id=payload.user_id,
+            media_id=payload.media_id,
+            feedback=payload.feedback,
+        )
+        db.add(feedback)
+
+    latest_feedback = db.get(LatestFeedback, payload.user_id)
+
+    if latest_feedback:
+        latest_feedback.media_id = payload.media_id
+        latest_feedback.feedback = payload.feedback
+        latest_feedback.updated_at = func.now()
+    else:
+        latest_feedback = LatestFeedback(
+            user_id=payload.user_id,
+            media_id=payload.media_id,
+            feedback=payload.feedback,
+        )
+        db.add(latest_feedback)
+
+    db.commit()
+    return {"ok": True}
+
+
+@api.post("/api/undo/{user_id}")
+def undo_latest_feedback(
+    user_id: int,
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    latest_feedback = db.get(LatestFeedback, user_id)
+
+    if not latest_feedback:
+        raise HTTPException(status_code=400, detail="No feedback to undo")
+
+    feedback = db.get(UserMediaFeedback, (user_id, latest_feedback.media_id))
+
+    if feedback and feedback.feedback == latest_feedback.feedback:
+        db.delete(feedback)
+
+    db.delete(latest_feedback)
+    db.commit()
+
+    return {"ok": True}
+
+
 @api.delete("/api/likes/{user_id}/{media_id}")
 def unlike_media(
     user_id: int,
     media_id: int,
     _: bool = Depends(require_internal_secret),
-    db : Session = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     feedback = db.get(UserMediaFeedback, (user_id, media_id))
 

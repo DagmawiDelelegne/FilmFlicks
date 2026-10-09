@@ -17,8 +17,7 @@ export function getMediaDisplayType(item: MediaItem) {
 
 
 export type FeedbackPaylaod ={
-    google_id : string;
-    title : string;
+    media_id : number;
     action : "like" | "dislike";
 };
 

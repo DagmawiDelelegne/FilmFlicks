@@ -40,3 +40,8 @@ class UserOut(BaseModel):
 class LikePayload(BaseModel):
     user_id: int
     media_id: int
+
+class FeedbackPayload(BaseModel):
+    user_id: int
+    media_id: int
+    feedback: Literal["like", "dislike"]

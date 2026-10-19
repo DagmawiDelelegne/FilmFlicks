@@ -318,3 +318,39 @@ def unlike_media(
         db.commit()
 
     return {"ok": True}
+
+
+@api.post("/api/onboarding/{user_id}")
+def user_onboarding(
+    user_id: int,
+    genre_list : list[str],
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+
+    user = db.get(User, (user_id))
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.preferred_genres = genre_list
+    user.genre_onboarding_completed = True
+
+    db.commit()
+    return {"ok": True}
+
+@api.get("/api/onboarding/{user_id}")
+def get_onboarding(
+    user_id: int,
+    _ : bool = Depends(require_internal_secret),
+    db : Session = Depends(get_db),
+):
+
+    user = db.get(User, (user_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "preferred_genres": user.preferred_genres,
+        "onboarding_completed": user.genre_onboarding_completed,
+    }

@@ -1,4 +1,4 @@
-import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse } from "./types/media";
+import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse, OnboardingStatus } from "./types/media";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -73,4 +73,30 @@ export async function getLikedCount(): Promise<number> {
 export async function undoFeedback(): Promise<void> {
   const res = await fetch (`/api/undo`, {method: "POST"});
   if (!res.ok) throw new Error (`undoFeedback failed : ${res.status}`);
+}
+
+
+export async function getOnboarding(): Promise<OnboardingStatus>{
+  const res = await fetch(`/api/onboarding`,{
+    cache: "no-store",
+  });
+
+  if (!res.ok){
+    throw new Error (`getOnboarding failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function saveOnboarding(genres: string[]): Promise<void>{
+  const res = await fetch(`/api/onboarding`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(genres),
+  });
+
+  if (!res.ok){
+    throw new Error (`SaveOnboarding failed: ${res.status}`);
+  }
 }

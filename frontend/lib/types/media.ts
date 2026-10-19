@@ -27,3 +27,8 @@ export type PaginatedMediaResponse = {
     limit: number;
     has_next: boolean;
 }
+
+export type OnboardingStatus = {
+    preferred_genres : String[];
+    onboarding_completed : boolean;
+}

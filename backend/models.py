@@ -25,6 +25,16 @@ class User(Base):
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     name: Mapped[str] = mapped_column(Text,nullable=False,default="")
     picture: Mapped[str] = mapped_column(Text,nullable=False,default="")
+    preferred_genres: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        server_default=text("ARRAY[]::TEXT[]"),
+    )
+    genre_onboarding_completed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("FALSE"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

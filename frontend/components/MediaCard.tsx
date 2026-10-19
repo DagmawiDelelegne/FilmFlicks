@@ -9,6 +9,7 @@ type MediaCardProps = {
   item: MediaItem;
   onClick?: () => void;
   disableLink?: boolean;
+  layout?: "discovery" | "default";
 };
 
 const FALLBACK_IMAGE = "/thumbnail_resources/not_found_cat.png";
@@ -27,7 +28,9 @@ function resolveThumbnailUrl(thumbnailUrl: string) {
   return `https://image.tmdb.org/t/p/w500${src}`;
 }
 
-export function MediaCard({ item, onClick, disableLink = false }: MediaCardProps) {
+export function MediaCard({ item, onClick, disableLink = false, layout = "default" }: MediaCardProps) {
+  const isDiscovery = layout === "discovery";
+
   const href = `/media/${encodeURIComponent(item.title)}`;
   const resolvedImgSrc = resolveThumbnailUrl(item.thumbnail_url);
   const [failedImgSrc, setFailedImgSrc] = useState<string | null>(null);
@@ -35,10 +38,36 @@ export function MediaCard({ item, onClick, disableLink = false }: MediaCardProps
     failedImgSrc === resolvedImgSrc ? FALLBACK_IMAGE : resolvedImgSrc;
 
   const streamingService = item.streaming_service?.trim();
-  const className =
-    "relative block w-full max-w-md overflow-hidden rounded-3xl bg-white/5 ring-1 ring-white/10";
+  const className = isDiscovery
+    ? "flex h-full min-h-0 min-w-0 w-full flex-col gap-2"
+    : "relative block w-full max-w-md overflow-hidden rounded-3xl bg-white/5 ring-1 ring-white/10";
 
-  const cardContent = (
+  const cardContent = isDiscovery ? (
+    <>
+      <div className="relative min-h-0 flex-1">
+        <Image
+          src={imgSrc}
+          alt={item.title}
+          fill
+          sizes="(max-width: 640px) 90vw, 450px"
+          className="object-contain"
+          priority
+          onError={() => {
+            if (resolvedImgSrc !== FALLBACK_IMAGE) {
+              setFailedImgSrc(resolvedImgSrc);
+            }
+          }}
+        />
+      </div>
+
+      <h2
+        className="line-clamp-2 h-14 shrink-0 break-words text-center text-lg leading-7 font-semibold"
+        title={item.title}
+      >
+        {item.title}
+      </h2>
+    </>
+  ) : (
     <>
       <div className="relative h-[600px] w-full">
         <Image

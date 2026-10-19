@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const res = await fetch(`${backendUrl}/api/feedback`,{
         method: "POST",
         headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/Json",
             "backend-internal-secret": backendSecret,
         },
         body: JSON.stringify(

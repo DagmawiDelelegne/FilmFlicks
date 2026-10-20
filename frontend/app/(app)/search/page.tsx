@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SearchCard } from "@/components/SearchCard";
+import Pagination from "@/components/Pagination";
 import {
   searchMovies,
   getLikedMediaIds,
@@ -18,9 +19,10 @@ export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [hasNext, setHasNext] = useState(false);
+  const [totalPages, setTotalPages] = useState(0);
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [likedMediaIds, setLikedMediaIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -49,7 +51,8 @@ export default function SearchPage() {
 
       if (!trimmed) {
         setResults([]);
-        setHasNext(false);
+        setTotalPages(0);
+        setError(null);
       }
     }, 300);
 
@@ -58,20 +61,32 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!submittedQuery) return;
+    let cancelled = false;
 
     async function runSearch() {
       setLoading(true);
+      setError(null);
 
       try {
         const data = await searchMovies(submittedQuery, page, PAGE_SIZE);
+        if (cancelled) return;
+        if (page > Math.max(1, data.total_pages)) {
+          setPage(Math.max(1, data.total_pages));
+          return;
+        }
         setResults(data.items);
-        setHasNext(data.has_next);
+        setTotalPages(data.total_pages);
+      } catch {
+        if (!cancelled) setError("Unable to load search results. Please try again.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     runSearch();
+    return () => {
+      cancelled = true;
+    };
   }, [submittedQuery, page]);
 
   async function handleLike(item: MediaItem) {
@@ -125,6 +140,7 @@ export default function SearchPage() {
         />
 
         {loading && <p className="mt-4 text-white/60">Searching...</p>}
+        {error && <p role="alert" className="mt-4 text-red-400">{error}</p>}
 
         <div className="mt-6 flex flex-col gap-4">
           {results.map((item) => {
@@ -141,30 +157,12 @@ export default function SearchPage() {
           })}
         </div>
 
-        {!loading && submittedQuery && results.length === 0 && (
+        {!loading && !error && submittedQuery && results.length === 0 && (
           <p className="mt-6 text-white/50">No results found.</p>
         )}
 
-        {submittedQuery && results.length > 0 && (
-          <div className="mt-6 flex items-center justify-between">
-            <button
-              disabled={page === 1 || loading}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              className="rounded-md bg-white/10 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Previous
-            </button>
-
-            <span className="text-sm text-white/60">Page {page}</span>
-
-            <button
-              disabled={!hasNext || loading}
-              onClick={() => setPage((current) => current + 1)}
-              className="rounded-md bg-white/10 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
+        {submittedQuery && (
+          <Pagination page={page} totalPages={totalPages} loading={loading} onChange={setPage} />
         )}
       </section>
     </main>

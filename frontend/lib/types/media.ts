@@ -26,6 +26,7 @@ export type PaginatedMediaResponse = {
     page: number;
     limit: number;
     has_next: boolean;
+    total_pages: number;
 }
 
 export type OnboardingStatus = {

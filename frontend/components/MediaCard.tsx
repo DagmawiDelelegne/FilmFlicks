@@ -39,12 +39,11 @@ export function MediaCard({ item, onClick, disableLink = false, layout = "defaul
 
   const streamingService = item.streaming_service?.trim();
   const className = isDiscovery
-    ? "flex h-full min-h-0 min-w-0 w-full flex-col gap-2"
+    ? "flex h-full min-h-0 min-w-0 w-full items-center justify-center [container-type:inline-size]"
     : "relative block w-full max-w-md overflow-hidden rounded-3xl bg-white/5 ring-1 ring-white/10";
 
   const cardContent = isDiscovery ? (
-    <>
-      <div className="relative min-h-0 flex-1">
+      <div className="relative aspect-[2/3] h-full max-h-[150cqw] max-w-full overflow-hidden rounded-lg bg-black">
         <Image
           src={imgSrc}
           alt={item.title}
@@ -58,15 +57,36 @@ export function MediaCard({ item, onClick, disableLink = false, layout = "defaul
             }
           }}
         />
-      </div>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-transparent" />
 
-      <h2
-        className="line-clamp-2 h-14 shrink-0 break-words text-center text-lg leading-7 font-semibold"
-        title={item.title}
-      >
-        {item.title}
-      </h2>
-    </>
+        <div className="absolute inset-x-0 bottom-0 p-3 text-left sm:p-4">
+          <h2
+            className="line-clamp-2 break-words text-lg leading-6 font-semibold"
+            title={item.title}
+          >
+            {item.title}
+          </h2>
+          <p className="mt-1 text-xs text-white/70">
+            {getMediaDisplayType(item)}
+          </p>
+          <div className="mt-2 flex min-w-0 items-center gap-2 text-xs">
+            {streamingService && (
+              <span
+                className="max-w-[45%] shrink-0 truncate rounded bg-emerald-500/20 px-2 py-1 text-emerald-100"
+                title={streamingService}
+              >
+                {streamingService}
+              </span>
+            )}
+            <span className="min-w-0 truncate text-white/85" title={item.genres.join(", ")}>
+              {item.genres.slice(0, 3).join(", ")}
+            </span>
+          </div>
+          <p className="mt-2 line-clamp-2 text-xs leading-5 italic text-white/85 [@media(max-height:600px)]:hidden">
+            {item.overview}
+          </p>
+        </div>
+      </div>
   ) : (
     <>
       <div className="relative h-[600px] w-full">

@@ -100,3 +100,43 @@ export async function saveOnboarding(genres: string[]): Promise<void>{
     throw new Error (`SaveOnboarding failed: ${res.status}`);
   }
 }
+
+export async function get_stats() : Promise<{
+  "liked": number;
+  "disliked": number;
+}>{
+  
+  const res = await fetch("/api/stats",{
+    cache: "no-store",
+  }
+  )
+  if (!res.ok){
+    throw new Error(`Failed to fetch stats: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function get_genre_stats(): Promise<Record<string, number>>{
+    
+    const res = await fetch("/api/stats/genres", {
+      cache: "no-store",
+    })
+    
+  if (!res.ok){
+    throw new Error(`Failed to fetch genre stats: ${res.status}`);
+  }
+    return res.json();
+}
+
+export async function get_streaming_stats(): Promise<Record<string, number>>{
+    
+    const res = await fetch("/api/stats/streaming", {
+      cache: "no-store",
+    })
+    
+  if (!res.ok){
+    throw new Error(`Failed to fetch streaming stats: ${res.status}`);
+  }
+    return res.json();
+}

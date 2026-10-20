@@ -134,6 +134,7 @@ def search(query: str, page: int = Query(default=1, ge=1), limit: int = Query(de
         ),
         desc(Media.popularity),
         desc(Media.vote_count),
+        Media.id,
         )
         .offset(offset)
         .limit(limit + 1)
@@ -141,12 +142,17 @@ def search(query: str, page: int = Query(default=1, ge=1), limit: int = Query(de
     media_results = db.scalars(statement).all()
     has_next = len(media_results) > limit
     page_items = media_results[:limit]
+    total = db.scalar(
+        select(func.count()).select_from(Media)
+        .where(Media.title.ilike(search_text))
+    ) or 0
 
     return PaginatedMediaResponse(
         items=[media_to_api_item(media) for media in page_items],
         page=page,
         limit=limit,
         has_next=has_next,
+        total_pages=(total + limit - 1) // limit,
     )
 
 
@@ -176,7 +182,7 @@ def liked_media(user_id: int,
             UserMediaFeedback.user_id == user_id,
             UserMediaFeedback.feedback == "like",
         )
-        .order_by(desc(UserMediaFeedback.created_at))
+        .order_by(desc(UserMediaFeedback.created_at), Media.id)
         .offset(offset)
         .limit(limit+1)
     )
@@ -184,11 +190,18 @@ def liked_media(user_id: int,
     media_results = db.scalars(statement).all()
     has_next = len(media_results) > limit
     page_items = media_results[:limit]
+    total = db.scalar(
+        select(func.count()).select_from(UserMediaFeedback).where(
+            UserMediaFeedback.user_id == user_id,
+            UserMediaFeedback.feedback == "like",
+        )
+    ) or 0
     return PaginatedMediaResponse(
         items=[media_to_api_item(media) for media in page_items],
         page=page,
         limit=limit,
         has_next=has_next,
+        total_pages=(total + limit - 1) // limit,
     )
 
 # updates or addes to the user's feedback table
@@ -354,3 +367,84 @@ def get_onboarding(
         "preferred_genres": user.preferred_genres,
         "onboarding_completed": user.genre_onboarding_completed,
     }
+
+@api.get("/api/stats/genres/{user_id}", response_model = dict[str,int])
+def get_stats(user_id: int,
+              _ : bool = Depends(require_internal_secret),
+              db : Session = Depends(get_db)):
+    statement = (
+        select(Media.genres).join(
+            UserMediaFeedback,
+            UserMediaFeedback.media_id == Media.id,
+        ).where(
+            UserMediaFeedback.user_id == user_id,
+            UserMediaFeedback.feedback == "like",
+        )
+    )
+
+    genre_list = db.scalars(statement).all()
+
+    genre_dict = {}
+    for genres in genre_list:
+        for genre in genres:
+            if genre not in genre_dict:
+                genre_dict[genre] = 1
+            else:
+                genre_dict[genre] += 1
+
+    return genre_dict
+
+@api.get("/api/stats/streaming/{user_id}", response_model = dict[str, int])
+def get_streaming(user_id: int, 
+                  _ : bool = Depends(require_internal_secret),
+                  db : Session = Depends(get_db)):
+
+    statement = (
+        select(Media.primary_streaming_service)
+        .join(
+            UserMediaFeedback,
+            UserMediaFeedback.media_id == Media.id
+        ).where(
+            UserMediaFeedback.user_id == user_id,
+            UserMediaFeedback.feedback == "like"
+        )
+    )
+    streaming = db.scalars(statement).all()
+    
+    streaming_counts = {}
+
+    for service in streaming:
+        service = (service or "").strip()
+
+        if not service:
+            continue
+
+        if service not in streaming_counts:
+            streaming_counts[service] = 1
+        else:
+            streaming_counts[service] += 1
+
+    return streaming_counts
+
+@api.get("/api/stats/{user_id}", response_model = dict[str,int])
+def feedback_stat(user_id : int,
+                  _ : bool = Depends(require_internal_secret),
+                  db : Session = Depends(get_db)):
+    statement = (
+        select(UserMediaFeedback.feedback)
+        .where(UserMediaFeedback.user_id == user_id)
+    )
+
+    feedbacks = db.scalars(statement)
+    counts = {
+        "liked" : 0,
+        "disliked" : 0,
+    }
+    
+    for feedback in feedbacks:
+        if feedback == "like":
+            counts["liked"] += 1
+        elif feedback == "dislike":
+            counts["disliked"] += 1
+
+    return counts

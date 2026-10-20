@@ -1,16 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MediaCard } from "@/components/MediaCard";
 import { DetailsCard } from "@/components/DetailsCard";
-import UndoButton from "@/components/UndoButton";
-import { Heart, X } from "lucide-react";
-import { getRec, sendFeedback, getLikedCount, undoFeedback } from "@/lib/api";
-import { MediaItem } from "@/lib/types/media";
+import { Heart, X, ArrowRight, RotateCcw, Undo2, Info } from "lucide-react";
+import { getRec, sendFeedback, getOnboarding, saveOnboarding, undoFeedback } from "@/lib/api";
+import type { MediaItem, OnboardingStatus } from "@/lib/types/media";
 import { useSession } from "next-auth/react";
 
 const RECOMMENDATION_BATCH_SIZE = 10;
 const QUEUE_REFILL_THRESHOLD = 3;
+const GENRES = [
+  "Action", "Action & Adventure", "Adventure", "Animation", "Comedy", "Crime",
+  "Documentary", "Drama", "Family", "Fantasy", "History", "Horror", "Kids",
+  "Music", "Mystery", "News", "Reality", "Romance", "Science Fiction",
+  "Sci-Fi & Fantasy", "Soap", "Talk", "Thriller", "TV Movie", "War",
+  "War & Politics", "Western",
+];
 
 async function fetchRecommendationBatch(existingIds = new Set<number>()) {
   const recommendations = await getRec(RECOMMENDATION_BATCH_SIZE);
@@ -19,11 +25,16 @@ async function fetchRecommendationBatch(existingIds = new Set<number>()) {
 
 export default function DiscoveryPage() {
   const { data: session, status } = useSession();
+  const detailsDialog = useRef<HTMLDialogElement>(null);
 
   const [item, setItem] = useState<MediaItem | null>(null);
   const [queue, setQueue] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [likedCount, setLikedCount] = useState<number | null>(null);
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [savingOnboarding, setSavingOnboarding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [canUndo, setCanUndo] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -32,32 +43,25 @@ export default function DiscoveryPage() {
   );
 
   useEffect(() => {
-    async function loadCount() {
-      if (!session?.user?.id) return;
-
-      try {
-        const count = await getLikedCount();
-        setLikedCount(count);
-      } catch (err) {
-        console.error("Failed to load liked count:", err);
-      }
-    }
-
-    if (status === "authenticated") {
-      loadCount();
-    }
-  }, [status, session?.user?.id]);
-
-  useEffect(() => {
     let cancelled = false;
 
-    async function loadRecommendations() {
-      if (!session?.user?.id) return;
-      if (likedCount === null || likedCount < 5) return;
-
+    async function loadDiscovery() {
       setLoading(true);
+      setError(null);
+      setOnboarding(null);
+      setItem(null);
+      setQueue([]);
+      setCanUndo(false);
+      setLastFeedbackItem(null);
 
       try {
+        const data = await getOnboarding();
+        if (cancelled) return;
+        setOnboarding(data);
+        setSelectedGenres(data.preferred_genres.map(String));
+
+        if (!data.onboarding_completed) return;
+
         const recommendations = await fetchRecommendationBatch();
         if (cancelled) return;
 
@@ -65,10 +69,9 @@ export default function DiscoveryPage() {
         setItem(first ?? null);
         setQueue(rest);
       } catch (err) {
-        console.error("Failed to load recommendations:", err);
+        console.error("Failed to load discovery:", err);
         if (!cancelled) {
-          setItem(null);
-          setQueue([]);
+          setError("Unable to load discovery. Please try again.");
         }
       } finally {
         if (!cancelled) {
@@ -77,14 +80,29 @@ export default function DiscoveryPage() {
       }
     }
 
-    if (status === "authenticated") {
-      loadRecommendations();
+    if (status === "authenticated" && session?.user?.id) {
+      loadDiscovery();
     }
 
     return () => {
       cancelled = true;
     };
-  }, [status, session?.user?.id, likedCount]);
+  }, [status, session?.user?.id, retryCount]);
+
+  async function completeOnboarding(genres: string[]) {
+    if (!onboarding || savingOnboarding) return;
+    setSavingOnboarding(true);
+    setError(null);
+
+    try {
+      await saveOnboarding(genres);
+      setRetryCount((count) => count + 1);
+    } catch {
+      setError("Unable to save genre preferences. Please try again.");
+    } finally {
+      setSavingOnboarding(false);
+    }
+  }
 
   async function handleFeedback(action: "like" | "dislike") {
     if (!item || !session?.user?.id || submitting) return;
@@ -157,23 +175,79 @@ export default function DiscoveryPage() {
     );
   }
 
-  if (likedCount !== null && likedCount < 5) {
+  if (status === "loading" || loading) {
+    return <div className="text-white p-6" role="status">Loading...</div>;
+  }
+
+  if (error && (!onboarding || onboarding.onboarding_completed)) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold">
-            Please search and select at least 5 movies
-          </h1>
-          <p className="mt-2 text-white/60">
-            You've selected {likedCount} so far
-          </p>
-        </div>
+      <main className="min-h-screen bg-black text-white p-6">
+        <p role="alert">{error}</p>
+        <button
+          onClick={() => setRetryCount((count) => count + 1)}
+          className="mt-4 inline-flex items-center gap-2 rounded border border-white/30 px-4 py-2"
+        >
+          <RotateCcw size={16} /> Retry
+        </button>
       </main>
     );
   }
 
-  if (loading || likedCount === null) {
-    return <div className="text-white p-6">Loading...</div>;
+  if (onboarding && !onboarding.onboarding_completed) {
+    return (
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-3xl px-6 py-8">
+          <h1 className="text-2xl font-semibold">Your Genres</h1>
+          <form
+            className="mt-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void completeOnboarding(selectedGenres);
+            }}
+          >
+            <fieldset disabled={savingOnboarding}>
+              <legend className="mb-4 text-sm text-white/70">Genre preferences</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {GENRES.map((genre) => (
+                  <label key={genre} className="flex min-h-11 items-center gap-3 border-b border-white/15 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedGenres.includes(genre)}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setSelectedGenres((current) => checked
+                          ? [...current, genre]
+                          : current.filter((selected) => selected !== genre));
+                      }}
+                      className="h-4 w-4 shrink-0 accent-green-500"
+                    />
+                    <span className="min-w-0 break-words">{genre}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            {error && <p role="alert" className="mt-4 text-red-400">{error}</p>}
+            <div className="sticky bottom-0 mt-6 flex flex-wrap items-center gap-4 border-t border-white/15 bg-black py-4">
+              <button
+                type="submit"
+                disabled={savingOnboarding || selectedGenres.length === 0}
+                className="inline-flex min-h-11 items-center gap-2 rounded bg-green-600 px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingOnboarding ? "Saving..." : "Continue"} <ArrowRight size={16} />
+              </button>
+              <button
+                type="button"
+                disabled={savingOnboarding}
+                onClick={() => void completeOnboarding([])}
+                className="min-h-11 px-2 py-2 text-white/70 hover:text-white disabled:opacity-50"
+              >
+                Skip for now
+              </button>
+            </div>
+          </form>
+        </section>
+      </main>
+    );
   }
 
   if (!item) {
@@ -184,46 +258,82 @@ export default function DiscoveryPage() {
     );
   }
 
-  const iconClass =
-    "h-9 w-9 text-white-500 transition-colors hover:text-white-800";
+  const actionClass =
+    "grid h-12 w-12 shrink-0 place-items-center rounded-full cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-40";
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      <section className="mx-auto flex max-w-6xl flex-col items-center px-6">
-        <div className="mt-5 w-full flex justify-center">
-          <MediaCard item={item} disableLink />
-        </div>
+    <section
+      aria-label="Discovery"
+      className="mx-auto flex h-[calc(100dvh-5rem)] w-full max-w-lg flex-col gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-white"
+    >
+      <div className="min-h-0 flex-1">
+        <MediaCard item={item} disableLink layout="discovery" />
+      </div>
 
-        <div className="mt-4 flex items-center gap-10">
-          <button
-            onClick={() => handleFeedback("dislike")}
-            disabled={submitting || undoing}
-            className="grid h-15 w-15 place-items-center rounded-full bg-red-600/90 text-3xl shadow-lg ring-1 ring-white/10 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Dislike"
-          >
-            <X className={iconClass} />
-          </button>
+      <div className="flex h-12 shrink-0 items-center justify-center gap-4">
+        <button
+          type="button"
+          onClick={() => handleFeedback("dislike")}
+          disabled={submitting || undoing}
+          className={`${actionClass} bg-red-600 hover:bg-red-500`}
+          aria-label="Dislike"
+          title="Dislike"
+        >
+          <X size={26} />
+        </button>
 
-          <button
-            onClick={() => handleFeedback("like")}
-            disabled={submitting || undoing}
-            className="grid h-15 w-15 place-items-center rounded-full bg-green-600/90 text-3xl shadow-lg ring-1 ring-white/10 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Like"
-          >
-            <Heart className={iconClass} />
-          </button>
-        </div>
-
-        <UndoButton
-          disabled={!canUndo || submitting}
-          loading={undoing}
+        <button
+          type="button"
           onClick={undo}
-        />
+          disabled={!canUndo || submitting || undoing}
+          className={`${actionClass} bg-white/10 hover:bg-white/20`}
+          aria-label="Undo previous feedback"
+          title={undoing ? "Undoing..." : "Undo previous feedback"}
+          aria-busy={undoing}
+        >
+          <Undo2 size={22} />
+        </button>
 
-        <div className="mt-6 w-full mb-6">
-          <DetailsCard item={item} />
-        </div>
-      </section>
-    </main>
+        <button
+          type="button"
+          onClick={() => handleFeedback("like")}
+          disabled={submitting || undoing}
+          className={`${actionClass} bg-green-600 hover:bg-green-500`}
+          aria-label="Like"
+          title="Like"
+        >
+          <Heart size={26} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => detailsDialog.current?.showModal()}
+          className={`${actionClass} bg-white/10 hover:bg-white/20`}
+          aria-label="Show media details"
+          title="Show media details"
+          aria-haspopup="dialog"
+        >
+          <Info size={22} />
+        </button>
+      </div>
+
+      <dialog
+        ref={detailsDialog}
+        aria-labelledby="discovery-details-title"
+        className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-lg border border-white/15 bg-black p-0 text-white backdrop:bg-black/75"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            detailsDialog.current?.close();
+          }
+        }}
+      >
+        <DetailsCard
+          item={item}
+          titleId="discovery-details-title"
+          opaque
+          onClose={() => detailsDialog.current?.close()}
+        />
+      </dialog>
+    </section>
   );
 }

@@ -9,10 +9,11 @@ import {
   ArcElement,
   Tooltip,
   Legend,
-  ChartOptions,
-  ChartData,
+  type ChartOptions,
+  type ChartData,
+  type Plugin,
 } from "chart.js";
-
+import { get_stats, get_genre_stats, get_streaming_stats } from "@/lib/api";
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 interface Stats {
@@ -36,76 +37,58 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user?.googleId) {
-      if (status === "unauthenticated") setLoading(false);
-      return;
-    }
-
-    const googleId = session.user.googleId;
+    let cancelled = false;
 
     async function fetchStats() {
+      setLoading(true);
+      setStats(null);
+      setGenres({});
+      setStreaming({});
+
       try {
-        const resStats = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/stats/${googleId}`,
-          { cache: "no-store" }
-        );
+        const [dataStats, dataGenres, dataStreaming] = await Promise.all([
+          get_stats(),
+          get_genre_stats(),
+          get_streaming_stats(),
+        ]);
+        if (cancelled) return;
 
-        if (!resStats.ok)
-          throw new Error(`Failed to fetch stats: ${resStats.status}`);
-
-        setStats(await resStats.json());
-
-        // ---- GENRES ----
-        const resGenres = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/stats/genres/${googleId}`,
-          { cache: "no-store" }
-        );
-
-        if (!resGenres.ok)
-          throw new Error(`Failed to fetch genres: ${resGenres.status}`);
-
-        const dataGenres: GenreStats = await resGenres.json();
         const sortedGenres = Object.entries(dataGenres)
           .sort(([, a], [, b]) => b - a)
           .slice(0, 5);
 
+        setStats(dataStats);
         setGenres(Object.fromEntries(sortedGenres));
-
-        const resStreaming = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/stats/streaming/${googleId}`,
-          { cache: "no-store" }
-        );
-
-        if (!resStreaming.ok)
-          throw new Error(`Failed to fetch streaming: ${resStreaming.status}`);
-
-        setStreaming(await resStreaming.json());
+        setStreaming(dataStreaming);
       } catch (err) {
-        console.error(err);
+        if (!cancelled) console.error("Failed to load stats:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    fetchStats();
-  }, [status, session?.user?.googleId]);
+    if (status === "authenticated" && session?.user?.id) {
+      fetchStats();
+    } else if (status === "unauthenticated") {
+      setStats(null);
+      setGenres({});
+      setStreaming({});
+      setLoading(false);
+    }
 
-  if (loading)
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session?.user?.id]);
+
+  if (status === "loading" || loading)
     return <p className="p-6 text-white">Loading stats...</p>;
 
   if (!stats)
     return <p className="p-6 text-red-500">Failed to load stats</p>;
 
-  const genreSafe: Record<string, number> = { ...genres };
-  const genreKeys = Object.keys(genreSafe);
-  const genreValues = Object.values(genreSafe);
-
-  if (genreKeys.length === 1) {
-    genreSafe["Other"] = Math.max(1, Math.floor(genreValues[0] * 0.5));
-  }
-
-  const genreLabels = Object.keys(genreSafe);
-  const genreDataValues = Object.values(genreSafe);
+  const genreLabels = Object.keys(genres);
+  const genreDataValues = Object.values(genres);
   const genreData: ChartData<"pie", number[], string> = {
     labels: genreLabels,
     datasets: [
@@ -143,10 +126,10 @@ export default function StatsPage() {
     ],
   };
 
-  const plugins = [
+  const plugins: Plugin<"pie">[] = [
     {
       id: "sliceLabels",
-      afterDraw: (chart: any) => {
+      afterDraw: (chart) => {
         const meta = chart.getDatasetMeta(0);
         const labels = chart.data.labels;
 
@@ -154,7 +137,8 @@ export default function StatsPage() {
 
         const ctx = chart.ctx;
 
-        meta.data.forEach((arc: any, index: number) => {
+        meta.data.forEach((arc, index) => {
+          if (!(arc instanceof ArcElement)) return;
           const label = labels[index];
           if (!label) return;
 

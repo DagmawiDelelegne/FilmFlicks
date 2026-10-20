@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { DetailsCard } from "@/components/DetailsCard";
 import { MediaCard } from "@/components/MediaCard";
+import Pagination from "@/components/Pagination";
 import { getLikedMedia, unlikeMedia } from "@/lib/api";
 import { MediaItem } from "@/lib/types/media";
 import { useSession } from "next-auth/react";
@@ -14,23 +15,11 @@ export default function MatchesPage() {
   const { data: session, status } = useSession();
   const [matches, setMatches] = useState<MediaItem[]>([]);
   const [page, setPage] = useState(1);
-  const [hasNext, setHasNext] = useState(false);
+  const [totalPages, setTotalPages] = useState(0);
+  const [reloadCount, setReloadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState<MediaItem | null>(null);
   const detailsTitleId = useId();
-
-  async function loadMatches() {
-    setLoading(true);
-    try {
-      const data = await getLikedMedia(page, PAGE_SIZE);
-      setMatches(data.items);
-      setHasNext(data.has_next);
-    } catch (err) {
-      console.error("Failed to load matches:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleRemove(item: MediaItem) {
     if (!session?.user?.id) return;
@@ -38,9 +27,7 @@ export default function MatchesPage() {
     try {
       await unlikeMedia(item.id);
 
-      setMatches((current) =>
-        current.filter((match) => match.id !== item.id)
-      );
+      setReloadCount((count) => count + 1);
 
       if (selectedMatch?.id === item.id) {
         setSelectedMatch(null);
@@ -51,15 +38,37 @@ export default function MatchesPage() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadMatches() {
+      setLoading(true);
+      try {
+        const data = await getLikedMedia(page, PAGE_SIZE);
+        if (cancelled) return;
+        if (page > Math.max(1, data.total_pages)) {
+          setPage(Math.max(1, data.total_pages));
+          return;
+        }
+        setMatches(data.items);
+        setTotalPages(data.total_pages);
+      } catch (err) {
+        console.error("Failed to load matches:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
     if (status === "authenticated" && session?.user?.id) {
       loadMatches();
-      return;
     }
 
     if (status === "unauthenticated") {
       setLoading(false);
     }
-  }, [status, session?.user?.id, page]);
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session?.user?.id, page, reloadCount]);
 
   if (status === "loading" || loading) return <div className="min-h-screen p-6 text-white">Loading...</div>;
   if (matches.length === 0) return <div className="min-h-screen p-6 text-white">No liked media yet.</div>;
@@ -90,25 +99,7 @@ export default function MatchesPage() {
         ))}
       </div>
 
-      <div className="mt-6 flex items-center justify-between">
-        <button
-          disabled={page === 1 || loading}
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
-          className="rounded-md bg-white/10 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Previous
-        </button>
-
-        <span className="text-sm text-white/60">Page {page}</span>
-
-        <button
-          disabled={!hasNext || loading}
-          onClick={() => setPage((current) => current + 1)}
-          className="rounded-md bg-white/10 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Next
-        </button>
-      </div>
+      <Pagination page={page} totalPages={totalPages} loading={loading} onChange={setPage} />
 
       {selectedMatch ? (
         <div

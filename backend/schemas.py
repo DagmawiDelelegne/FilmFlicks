@@ -21,6 +21,7 @@ class PaginatedMediaResponse(BaseModel):
     page: int
     limit: int
     has_next: bool
+    total_pages: int
 
 class OAuthLoginIn(BaseModel):
     provider: OAuthProvider

@@ -4,6 +4,8 @@ from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select, case, desc, func
+from contextlib import asynccontextmanager
+from recommender import get_recommendations, build_genre_index
 
 from dotenv import load_dotenv
 
@@ -13,7 +15,20 @@ from database import sessionLocal
 from helpers import media_to_api_item
 from recommender import get_recommendations
 
-api = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    with sessionLocal() as db:
+        app.state.recommender_index = build_genre_index(db)
+
+    print(
+        "Recommendation genre index loaded:",
+        app.state.recommender_index["genre_matrix"].shape,
+    )
+
+    yield
+
+
+api = FastAPI(lifespan=lifespan)
 
 load_dotenv()
 INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET")

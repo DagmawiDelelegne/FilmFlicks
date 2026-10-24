@@ -8,8 +8,8 @@ import { getRec, sendFeedback, getOnboarding, saveOnboarding, undoFeedback } fro
 import type { MediaItem, OnboardingStatus } from "@/lib/types/media";
 import { useSession } from "next-auth/react";
 
-const RECOMMENDATION_BATCH_SIZE = 10;
-const QUEUE_REFILL_THRESHOLD = 3;
+const RECOMMENDATION_BATCH_SIZE = 3;
+
 const GENRES = [
   "Action", "Action & Adventure", "Adventure", "Animation", "Comedy", "Crime",
   "Documentary", "Drama", "Family", "Fantasy", "History", "Horror", "Kids",
@@ -18,9 +18,12 @@ const GENRES = [
   "War & Politics", "Western",
 ];
 
-async function fetchRecommendationBatch(existingIds = new Set<number>()) {
-  const recommendations = await getRec(RECOMMENDATION_BATCH_SIZE);
-  return recommendations.filter((media) => !existingIds.has(media.id));
+async function fetchRecommendationBatch(existingIds = new Set<number>()): Promise<MediaItem[]> {
+  const needed = Math.max(0, RECOMMENDATION_BATCH_SIZE - existingIds.size);
+  if (needed == 0) return [];
+
+  const recommendations = await getRec(needed,Array.from(existingIds));
+  return recommendations;
 }
 
 export default function DiscoveryPage() {
@@ -105,7 +108,7 @@ export default function DiscoveryPage() {
   }
 
   async function handleFeedback(action: "like" | "dislike") {
-    if (!item || !session?.user?.id || submitting) return;
+    if (!item || !session?.user?.id || submitting || undoing) return;
 
     const feedbackItem = item;
     setSubmitting(true);
@@ -115,33 +118,37 @@ export default function DiscoveryPage() {
         media_id: feedbackItem.id,
         action,
       });
+    } catch (err) {
+      console.error("Feedback was not saved:", err);
+      setSubmitting(false);
+      return;
+    }
 
-      const [nextFromQueue, ...remainingQueue] = queue;
-      let nextItem = nextFromQueue ?? null;
-      let nextQueue = remainingQueue;
+    const [nextFromQueue, ...remainingQueue] = queue;
+    const nextItem = nextFromQueue ?? null;
 
-      if (!nextItem || nextQueue.length <= QUEUE_REFILL_THRESHOLD) {
-        const existingIds = new Set(nextQueue.map((media) => media.id));
+    setLastFeedbackItem(feedbackItem);
+    setCanUndo(true);
+    setItem(nextItem);
+    setQueue(remainingQueue);
 
-        if (nextItem) {
-          existingIds.add(nextItem.id);
-        }
+    const existingIds = new Set(remainingQueue.map((media) => media.id));
 
-        const moreRecommendations = await fetchRecommendationBatch(existingIds);
+    if (nextItem) {
+      existingIds.add(nextItem.id);
+    }
+    try {
+      const replacements = await fetchRecommendationBatch(existingIds);
 
-        if (!nextItem) {
-          const [firstMore, ...restMore] = moreRecommendations;
-          nextItem = firstMore ?? null;
-          nextQueue = restMore;
-        } else {
-          nextQueue = [...nextQueue, ...moreRecommendations];
-        }
+      if (nextItem) {
+        setQueue([...remainingQueue, ...replacements]);
+      } else {
+        const [first, ...rest] = replacements;
+        setItem(first ?? null);
+        setQueue(rest);
       }
-
-      setLastFeedbackItem(feedbackItem);
-      setItem(nextItem);
-      setQueue(nextQueue);
-      setCanUndo(true);
+    } catch (err) {
+      console.error("Feedback saved, but recommendations could not refill:", err);
     } finally {
       setSubmitting(false);
     }
@@ -158,7 +165,8 @@ export default function DiscoveryPage() {
       const currentItem = item;
       setItem(lastFeedbackItem);
       setQueue((currentQueue) =>
-        currentItem ? [currentItem, ...currentQueue] : currentQueue
+        (currentItem ? [currentItem, ...currentQueue] : currentQueue)
+        .slice(0,RECOMMENDATION_BATCH_SIZE-1)
       );
       setLastFeedbackItem(null);
       setCanUndo(false);

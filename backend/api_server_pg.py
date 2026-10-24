@@ -246,11 +246,12 @@ def liked_count(
 @api.get("/api/rec/{user_id}", response_model=list[MediaItem])
 def recommended_media(
     user_id: int,
-    limit: int = Query(default=10, ge=1, le=50),
+    limit: int = Query(default=3, ge=1, le=3),
+    exclude_ids: list[int] | None = Query(default=None),
     _: bool = Depends(require_internal_secret),
     db: Session = Depends(get_db),
 ):
-    recommendations = get_recommendations(user_id=user_id, db=db, limit=limit)
+    recommendations = get_recommendations(user_id=user_id, db=db, limit=limit, exclude_ids=exclude_ids)
     return [media_to_api_item(media) for media in recommendations]
 
 

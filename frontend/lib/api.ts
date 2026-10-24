@@ -3,9 +3,13 @@ import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse, OnboardingStatus } 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 
-export async function getRec(limit = 10): Promise<MediaItem[]> {
-    const res = await fetch(`/api/rec?limit=${limit}`, {cache:"no-store"});
-    if (!res.ok) throw new Error(`getRec failed: ${res.status}`);
+export async function getRec(limit = 3, exclude_ids: number[]): Promise<MediaItem[]> {
+  const params = new URLSearchParams({limit:String(limit)});
+  for (const id of exclude_ids){
+    params.append("exclude_ids",String(id));
+  }
+  const res = await fetch(`/api/rec?${params}`, {cache:"no-store"});
+  if (!res.ok) throw new Error(`getRec failed: ${res.status}`);
   return res.json();
 }
 

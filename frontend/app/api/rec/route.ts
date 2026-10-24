@@ -25,9 +25,14 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const limit = searchParams.get("limit") ?? "10";
+  const backendParams = new URLSearchParams({limit});
+
+  for (const id of searchParams.getAll("exclude_ids")){
+    backendParams.append("exclude_ids",id);
+  }
 
   const res = await fetch(
-    `${backendUrl}/api/rec/${session.user.id}?limit=${limit}`,
+    `${backendUrl}/api/rec/${session.user.id}?${backendParams.toString()}`,
     {
       headers: {
         "backend-internal-secret": backendSecret,

@@ -59,6 +59,8 @@ def build_recommender_index(db: Session):
             Media.keywords,
             Media.overview,
             Media.is_anime,
+            Media.vote_average,
+            Media.vote_count,
         )
         .where(Media.adult.is_(False))
         .order_by(Media.id)
@@ -151,6 +153,23 @@ def build_recommender_index(db: Session):
         "context_encoder": context_encoder,
         "context_matrix": context_matrix,
     }
+
+    ratings = np.clip(
+    np.array([row.vote_average or 0 for row in rows], dtype=np.float32),
+    0,
+    10,
+    )
+    votes = np.maximum(
+        np.array([row.vote_count or 0 for row in rows], dtype=np.float32),
+        0,
+    )
+
+    catalog_mean = float(ratings[votes > 0].mean()) if np.any(votes > 0) else 5.0
+    confidence = votes / (votes + 100.0)
+
+    index["quality_scores"] = (
+        confidence * ratings + (1 - confidence) * catalog_mean
+    ) / 10
 
     # Normalize each feature group before measuring title similarity.
     feature_blocks = [
@@ -444,6 +463,12 @@ def get_recommendations(
             * confidence
             * negative_context
         )
+
+    final_scores += np.where(
+        final_scores > 0,
+        0.05 * index["quality_scores"],
+        0.0,
+    )
 
     selected_rows = select_recommendation_rows(
         positive_scores,

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const limit = searchParams.get("limit") ?? "10";
+  const limit = searchParams.get("limit") ?? "3";
   const backendParams = new URLSearchParams({limit});
 
   for (const id of searchParams.getAll("exclude_ids")){

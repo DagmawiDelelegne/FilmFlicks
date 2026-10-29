@@ -1,11 +1,11 @@
 import os
 import secrets
-from fastapi import FastAPI, HTTPException, Depends, Header, Query
+from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select, case, desc, func
 from contextlib import asynccontextmanager
-from recommender import get_recommendations, build_genre_index
+from recommender import get_recommendations, build_recommender_index
 
 from dotenv import load_dotenv
 
@@ -18,12 +18,7 @@ from recommender import get_recommendations
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     with sessionLocal() as db:
-        app.state.recommender_index = build_genre_index(db)
-
-    print(
-        "Recommendation genre index loaded:",
-        app.state.recommender_index["genre_matrix"].shape,
-    )
+        app.state.recommender_index = build_recommender_index(db)
 
     yield
 
@@ -261,12 +256,18 @@ def liked_count(
 @api.get("/api/rec/{user_id}", response_model=list[MediaItem])
 def recommended_media(
     user_id: int,
+    request: Request,
     limit: int = Query(default=3, ge=1, le=3),
     exclude_ids: list[int] | None = Query(default=None),
     _: bool = Depends(require_internal_secret),
     db: Session = Depends(get_db),
 ):
-    recommendations = get_recommendations(user_id=user_id, db=db, limit=limit, exclude_ids=exclude_ids)
+    recommendations = get_recommendations(
+        user_id=user_id,
+        db=db,index=request.app.state.recommender_index,
+        limit=limit,
+        exclude_ids=exclude_ids
+        )
     return [media_to_api_item(media) for media in recommendations]
 
 

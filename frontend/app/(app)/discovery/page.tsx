@@ -11,11 +11,11 @@ import { useSession } from "next-auth/react";
 const RECOMMENDATION_BATCH_SIZE = 3;
 
 const GENRES = [
-  "Action", "Action & Adventure", "Adventure", "Animation", "Comedy", "Crime",
+  "Action", "Adventure", "Animation", "Comedy", "Crime",
   "Documentary", "Drama", "Family", "Fantasy", "History", "Horror", "Kids",
   "Music", "Mystery", "News", "Reality", "Romance", "Science Fiction",
-  "Sci-Fi & Fantasy", "Soap", "Talk", "Thriller", "TV Movie", "War",
-  "War & Politics", "Western",
+   "Soap", "Talk", "Thriller", "TV Movie", "War",
+  "Politics", "Western",
 ];
 
 async function fetchRecommendationBatch(existingIds = new Set<number>()): Promise<MediaItem[]> {

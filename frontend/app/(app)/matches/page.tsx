@@ -9,7 +9,7 @@ import { MediaItem } from "@/lib/types/media";
 import { useSession } from "next-auth/react";
 import { X } from "lucide-react";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
 export default function MatchesPage() {
   const { data: session, status } = useSession();

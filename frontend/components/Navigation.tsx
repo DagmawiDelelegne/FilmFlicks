@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
-import { Heart, Compass, Film, BarChart, Search, Menu, X } from "lucide-react";
-import LogoutButton from "./LogoutButton";
+import { Heart, Compass, Film, BarChart, Search, Menu, X, UserRound } from "lucide-react";
 
 const tabs = [
   { href: "/discovery", label: "Discovery", icon: Compass },
   { href: "/matches", label: "Liked", icon: Heart },
   { href: "/stats", label: "Stats", icon: BarChart },
   { href: "/search", label: "Search", icon: Search },
+  { href: "/account", label: "Account", icon: UserRound},
 ];
 
 export default function Navigation() {
@@ -33,7 +33,6 @@ export default function Navigation() {
           {label}
         </Link>
       ))}
-      <LogoutButton className={`${linkClass} cursor-pointer text-left`} />
     </>
   );
 

@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import List, Literal
-
+from datetime import datetime
 MediaType = Literal["movie","tv"]
 OAuthProvider = Literal["google","github","instagram"]
 
@@ -38,6 +38,10 @@ class UserOut(BaseModel):
     name: str
     picture: str
 
+class AccountOut(UserOut):
+    created_at: datetime
+    providers: list[str]
+    
 class LikePayload(BaseModel):
     user_id: int
     media_id: int

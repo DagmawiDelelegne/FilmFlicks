@@ -1,4 +1,4 @@
-import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse, OnboardingStatus } from "./types/media";
+import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse, OnboardingStatus, Account } from "./types/media";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -143,4 +143,20 @@ export async function get_streaming_stats(): Promise<Record<string, number>>{
     throw new Error(`Failed to fetch streaming stats: ${res.status}`);
   }
     return res.json();
+}
+
+export async function getAccount(): Promise<Account> {
+  const res = await fetch("/api/account", {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+
+    throw new Error(
+      data?.error || "Unable to load your account",
+    );
+  }
+
+  return res.json();
 }

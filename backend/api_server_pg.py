@@ -9,7 +9,7 @@ from recommender import get_recommendations, build_recommender_index
 
 from dotenv import load_dotenv
 
-from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload, PaginatedMediaResponse, FeedbackPayload
+from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload, PaginatedMediaResponse, FeedbackPayload, AccountOut
 from models import Media, User, UserAuthAccount, UserMediaFeedback, LatestFeedback
 from database import sessionLocal
 from helpers import media_to_api_item
@@ -120,6 +120,33 @@ def sync_user(payload: OAuthLoginIn,
         picture=user.picture,
     )
 
+@api.get("/api/users/{user_id}", response_model=AccountOut)
+def get_account(
+    user_id: int,
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    user = db.get(User,user_id)
+
+    if user is None:
+        raise HTTPException( status_code=404, detail = "User not found",)
+
+    providers = db.scalars(
+        select(UserAuthAccount.provider).
+        where(UserAuthAccount.user_id == user_id).
+        distinct().
+        order_by(UserAuthAccount.provider)
+    ).all()
+
+    return AccountOut(
+        id=user.id,
+        email=user.email,
+        email_verified=user.email_verified,
+        name=user.name,
+        picture=user.picture,
+        created_at=user.created_at,
+        providers=list(providers),
+    )
 """
 Search media by title
 """

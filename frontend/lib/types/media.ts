@@ -33,3 +33,14 @@ export type OnboardingStatus = {
     preferred_genres : String[];
     onboarding_completed : boolean;
 }
+
+
+export type Account = {
+  id: number;
+  email: string;
+  email_verified: boolean;
+  name: string;
+  picture: string;
+  created_at: string;
+  providers: string[];
+};

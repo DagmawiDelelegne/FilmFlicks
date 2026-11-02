@@ -147,6 +147,23 @@ def get_account(
         created_at=user.created_at,
         providers=list(providers),
     )
+
+@api.delete("/api/users/{user_id}", response_model=dict[str, bool])
+def delete_account(
+    user_id: int,
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    user = db.get(User, user_id)
+
+    if user is None:
+        return {"ok": True}
+
+    db.delete(user)
+    db.commit()
+
+    return {"ok": True}
+
 """
 Search media by title
 """
@@ -248,6 +265,14 @@ def like_media(
     _: bool = Depends(require_internal_secret),
     db: Session = Depends(get_db),
 ):
+    user = db.get(User, payload.user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+    
     feedback = db.get(UserMediaFeedback, (payload.user_id, payload.media_id))
 
     if feedback:
@@ -304,6 +329,14 @@ def save_feedback(
     _: bool = Depends(require_internal_secret),
     db: Session = Depends(get_db),
 ):
+    user = db.get(User, payload.user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+    
     media = db.get(Media, payload.media_id)
 
     if not media:

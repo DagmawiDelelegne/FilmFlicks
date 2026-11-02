@@ -59,3 +59,54 @@ export async function GET() {
     );
   }
 }
+
+export async function DELETE() {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: "Unauthenticated" },
+      { status: 401 },
+    );
+  }
+
+  if (!backendUrl || !backendSecret) {
+    return NextResponse.json(
+      { error: "Backend environment variables are missing" },
+      { status: 500 },
+    );
+  }
+
+  try {
+    const res = await fetch(
+      `${backendUrl}/api/users/${session.user.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          "backend-internal-secret": backendSecret,
+        },
+      },
+    );
+
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: "Unable to delete your account" },
+        { status: res.status },
+      );
+    }
+
+    return NextResponse.json(
+      { ok: true },
+      {
+        headers: {
+          "Cache-Control": "private, no-store",
+        },
+      },
+    );
+  } catch {
+    return NextResponse.json(
+      { error: "Unable to reach the account service" },
+      { status: 502 },
+    );
+  }
+}

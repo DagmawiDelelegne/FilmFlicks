@@ -160,3 +160,17 @@ export async function getAccount(): Promise<Account> {
 
   return res.json();
 }
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch("/api/account", {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+
+    throw new Error(
+      data?.error || "Unable to delete your account",
+    );
+  }
+}

@@ -1,6 +1,51 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useState } from "react";
 import LogoutButton from "@/components/LogoutButton";
+import { getAccount } from "@/lib/api";
+import type { Account } from "@/lib/types/media";
+import Link from "next/link";
+import { BarChart, ChevronRight } from "lucide-react";
 
 export default function AccountPage() {
+  const [account, setAccount] = useState<Account | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pictureFailed, setPictureFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccount() {
+      try {
+        const data = await getAccount();
+
+        if (!cancelled) {
+          setAccount(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load your account",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadAccount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <section className="mx-auto max-w-4xl space-y-6 px-4 py-8 text-white">
       <header>
@@ -9,6 +54,90 @@ export default function AccountPage() {
           Manage your profile and preferences.
         </p>
       </header>
+
+      {loading && (
+        <p role="status" className="text-white/60">
+          Loading your profile...
+        </p>
+      )}
+
+      {error && (
+        <p role="alert" className="text-red-300">
+          {error}
+        </p>
+      )}
+
+      {account && (
+        <section
+          aria-labelledby="profile-title"
+          className="rounded-2xl border border-white/10 bg-white/5 p-6"
+        >
+          <h2 id="profile-title" className="text-xl font-semibold">
+            Profile
+          </h2>
+
+          <div className="mt-5 flex items-center gap-4">
+            {account.picture && !pictureFailed ? (
+              <Image
+                src={account.picture}
+                alt="Your profile picture"
+                width={64}
+                height={64}
+                unoptimized
+                onError={() => setPictureFailed(true)}
+                className="h-16 w-16 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="grid h-16 w-16 shrink-0 place-items-center
+                           rounded-full bg-purple-500/20 text-2xl
+                           font-semibold text-purple-200"
+              >
+                {(account.name || account.email).charAt(0).toUpperCase()}
+              </div>
+            )}
+
+            <div className="min-w-0">
+              <p className="break-words text-lg font-medium">
+                {account.name || "Your profile"}
+              </p>
+              <p className="mt-1 break-words text-sm text-white/60">
+                {account.email}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      <Link
+        href="/stats"
+        className="flex items-center gap-4 rounded-2xl
+                  border border-white/10 bg-white/5 p-6
+                  transition-colors hover:bg-white/10
+                  focus-visible:outline-2
+                  focus-visible:outline-purple-400"
+      >
+        <BarChart
+          size={24}
+          aria-hidden="true"
+          className="shrink-0 text-purple-300"
+        />
+
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-semibold">Your stats</h2>
+
+          <p className="mt-1 text-sm text-white/60">
+            Explore your liked genres and streaming services.
+          </p>
+        </div>
+
+        <ChevronRight
+          size={20}
+          aria-hidden="true"
+          className="shrink-0 text-white/50"
+        />
+      </Link>
 
       <section
         aria-labelledby="account-actions-title"
@@ -22,8 +151,8 @@ export default function AccountPage() {
         </h2>
 
         <LogoutButton
-          className="mt-5 rounded-lg bg-white/10 px-4 py-3 text-sm
-                     font-medium hover:bg-white/20"
+          className="mt-5 rounded-lg bg-white/10 px-4 py-3
+                     text-sm font-medium hover:bg-white/20 cursor-pointer"
         />
       </section>
     </section>

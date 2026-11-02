@@ -8,7 +8,6 @@ import { Heart, Compass, Film, BarChart, Search, Menu, X, UserRound } from "luci
 const tabs = [
   { href: "/discovery", label: "Discovery", icon: Compass },
   { href: "/matches", label: "Liked", icon: Heart },
-  { href: "/stats", label: "Stats", icon: BarChart },
   { href: "/search", label: "Search", icon: Search },
   { href: "/account", label: "Account", icon: UserRound},
 ];

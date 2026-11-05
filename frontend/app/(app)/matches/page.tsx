@@ -62,14 +62,12 @@ export default function MatchesPage() {
       loadMatches();
     }
 
-    if (status === "unauthenticated") {
-      setLoading(false);
-    }
     return () => {
       cancelled = true;
     };
   }, [status, session?.user?.id, page, reloadCount]);
 
+  if (status === "unauthenticated") return null;
   if (status === "loading" || loading) return <div className="min-h-screen p-6 text-white">Loading...</div>;
   if (matches.length === 0) return <div className="min-h-screen p-6 text-white">No liked media yet.</div>;
 

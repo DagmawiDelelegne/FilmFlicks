@@ -30,7 +30,7 @@ export type PaginatedMediaResponse = {
 }
 
 export type OnboardingStatus = {
-    preferred_genres : String[];
+    preferred_genres : string[];
     onboarding_completed : boolean;
 }
 

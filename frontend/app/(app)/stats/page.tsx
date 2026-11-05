@@ -69,11 +69,6 @@ export default function StatsPage() {
 
     if (status === "authenticated" && session?.user?.id) {
       fetchStats();
-    } else if (status === "unauthenticated") {
-      setStats(null);
-      setGenres({});
-      setStreaming({});
-      setLoading(false);
     }
 
     return () => {
@@ -81,6 +76,7 @@ export default function StatsPage() {
     };
   }, [status, session?.user?.id]);
 
+  if (status === "unauthenticated") return null;
   if (status === "loading" || loading)
     return <p className="p-6 text-white">Loading stats...</p>;
 

@@ -17,7 +17,7 @@ export async function POST(request: Request){
         );
     }
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    const backendUrl = process.env.BACKEND_URL;
     const backendSecret = process.env.BACKEND_INTERNAL_SECRET;
 
     if (!backendUrl || !backendSecret) {
@@ -57,7 +57,7 @@ export async function GET(){
         return NextResponse.json({error: "Unauthenticated"}, {status: 401});
     }
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    const backendUrl = process.env.BACKEND_URL;
     const backendSecret = process.env.BACKEND_INTERNAL_SECRET;
 
     if (!backendUrl || !backendSecret) {

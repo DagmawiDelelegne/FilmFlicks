@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getServerSession } from "next-auth";
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+const backendUrl = process.env.BACKEND_URL;
 const backendSecret = process.env.BACKEND_INTERNAL_SECRET;
 
 function missingBackendEnvResponse() {

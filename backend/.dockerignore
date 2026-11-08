@@ -1,0 +1,14 @@
+venv/
+.venv/
+447app/
+filmflicks/
+**/__pycache__/
+.pytest_cache/
+
+.env*
+
+*.db*
+*.sqlite*
+*.csv
+
+media_collection/data/

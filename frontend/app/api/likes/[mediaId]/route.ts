@@ -15,7 +15,7 @@ export async function DELETE(
 
     const {mediaId} = await params;
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    const backendUrl = process.env.BACKEND_URL;
     const backendSecret = process.env.BACKEND_INTERNAL_SECRET;
 
     if(!backendSecret || !backendUrl){

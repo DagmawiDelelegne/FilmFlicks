@@ -40,10 +40,20 @@ export async function unlikeMedia(mediaId: number): Promise<void> {
     if (!res.ok) throw new Error(`unlikeMedia failed: ${res.status}`);
 }
 
-export async function searchMovies(query: string, page: number, limit = 10): Promise<PaginatedMediaResponse> {
-  const res = await fetch(
-    `${BASE_URL}/api/search?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`
-  );
+export async function searchMovies(
+  query: string,
+  page: number,
+  limit = 10,
+): Promise<PaginatedMediaResponse> {
+  const params = new URLSearchParams({
+    query,
+    page: String(page),
+    limit: String(limit),
+  });
+
+  const res = await fetch(`/api/search?${params}`, {
+    cache: "no-store",
+  });
 
   if (!res.ok) {
     throw new Error("Failed to search movies");

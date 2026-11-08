@@ -11,7 +11,12 @@ services:
       - "5434:5432"
     volumes:
       - filmflicks_postgres_data:/var/lib/postgresql/data
-
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U filmflicks -d filmflicks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      
   pgadmin:
     image: dpage/pgadmin4:8
     container_name: filmflicks-pgadmin
@@ -26,6 +31,23 @@ services:
     depends_on:
       - postgres
 
+  backend:
+    build: ./backend
+    image: filmflicks-backend
+    restart: unless-stopped
+
+    env_file:
+      - ./backend/.env
+
+    environment:
+      DATABASE_URL: "postgresql+psycopg://filmflicks:filmflicks@postgres:5432/filmflicks"
+
+    ports:
+      - "127.0.0.1:8001:8000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
 volumes:
   filmflicks_postgres_data:
   filmflicks_pgadmin_data:

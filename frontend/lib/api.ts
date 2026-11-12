@@ -1,6 +1,5 @@
 import { MediaItem, FeedbackPaylaod, PaginatedMediaResponse, OnboardingStatus, Account } from "./types/media";
 
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 
 export async function getRec(limit = 3, exclude_ids: number[]): Promise<MediaItem[]> {

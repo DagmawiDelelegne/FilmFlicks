@@ -12,6 +12,7 @@
     "@tanstack/react-query": "^5.102.3",
     "chart.js": "^4.5.1",
     "chartjs-plugin-datalabels": "^2.2.0",
+    "geist": "^1.9.2",
     "lucide-react": "^0.575.0",
     "next": "16.4.5",
     "next-auth": "^4.24.13",

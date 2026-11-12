@@ -48,6 +48,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+  
+  frontend:
+    build: ./frontend
+    image: filmflicks-frontend
+    restart: unless-stopped
+
+    env_file:
+      - ./frontend/.env.local
+
+    environment:
+      BACKEND_URL: "http://backend:8000"
+      NEXTAUTH_URL: "http://localhost:3000"
+
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    depends_on:
+      - backend
+      
 volumes:
   filmflicks_postgres_data:
   filmflicks_pgadmin_data:

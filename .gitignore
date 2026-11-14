@@ -29,3 +29,4 @@ csv_for_algo.csv
 backend/media_collection/data/*.json
 
 .env
+/.env.production

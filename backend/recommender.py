@@ -9,11 +9,14 @@ from sklearn.preprocessing import MultiLabelBinarizer, normalize
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from helpers import get_preference_categories, normalize_preferred_genres
 from models import Media, User, UserMediaFeedback
 
 
 PERSONALIZATION_LIKE_THRESHOLD = 10
 EXPLORATION_SHARE = 0.40
+MAX_LEARNED_WEIGHT = 0.65
+ONBOARDING_PRIOR_STRENGTH = 20
 
 DISLIKE_WEIGHT = 0.25
 CONTEXT_LIKE_WEIGHT = 0.10
@@ -72,9 +75,13 @@ def build_recommender_index(db: Session):
         )
 
     media_ids = [row.id for row in rows]
-    genre_lists = [
+    raw_genre_lists = [
         normalize_genres(row.genres or [])
         for row in rows
+    ]
+    genre_lists = [
+        get_preference_categories(genres, row.is_anime)
+        for row, genres in zip(rows, raw_genre_lists)
     ]
 
     genre_encoder = MultiLabelBinarizer(sparse_output=True)
@@ -126,13 +133,14 @@ def build_recommender_index(db: Session):
             dtype=np.float32,
         )
 
-    # No standalone anime feature: always pair it with content.
+    # Preserve the existing context signals from the original TMDB genres.
+    # Derived preference labels should not become pairs such as anime:Anime.
     context_lists = [
         [
             f"{'anime' if row.is_anime else 'other'}:{genre}"
             for genre in genres
         ]
-        for row, genres in zip(rows, genre_lists)
+        for row, genres in zip(rows, raw_genre_lists)
     ]
 
     context_encoder = MultiLabelBinarizer(sparse_output=True)
@@ -197,7 +205,7 @@ def get_genre_scores(preferred_genres: list[str], index: dict):
 
     selected = [
         genre
-        for genre in normalize_genres(preferred_genres)
+        for genre in normalize_genres(normalize_preferred_genres(preferred_genres))
         if genre in known_genres
     ]
 
@@ -395,17 +403,46 @@ def get_recommendations(
         Media.id.notin_(excluded_ids),
     )
 
-    personalized = (
-        len(liked_ids) >= PERSONALIZATION_LIKE_THRESHOLD
+    # Only indexed titles can contribute to the learned profile.
+    indexed_liked_ids = {
+        media_id
+        for media_id in liked_ids
+        if media_id in index["row_by_id"]
+    }
+    like_count = len(indexed_liked_ids)
+
+    onboarding_scores = get_genre_scores(
+        user.preferred_genres or [],
+        index,
     )
 
-    if personalized:
-        positive_scores = get_content_scores(liked_ids, index)
-    else:
-        positive_scores = get_genre_scores(
-            user.preferred_genres or [],
-            index,
-        )
+    liked_scores = get_content_scores(
+        indexed_liked_ids,
+        index,
+    )
+
+    learned_weight = 0.0
+    positive_scores = onboarding_scores
+
+    if liked_scores is not None:
+        if onboarding_scores is not None:
+            learned_weight = min(
+                MAX_LEARNED_WEIGHT,
+                like_count / (
+                    like_count + ONBOARDING_PRIOR_STRENGTH
+                ),
+            )
+
+            positive_scores = (
+                (1 - learned_weight) * onboarding_scores
+                + learned_weight * liked_scores
+            )
+
+        elif like_count >= PERSONALIZATION_LIKE_THRESHOLD:
+            # No usable onboarding preferences:
+            # use learned preferences after enough likes.
+            learned_weight = 1.0
+            positive_scores = liked_scores  
 
     if positive_scores is None:
         popular_pool = db.scalars(
@@ -427,16 +464,18 @@ def get_recommendations(
     final_scores = positive_scores.copy()
     context_weights = {"context_matrix": 1.0}
 
-    if personalized:
+    if learned_weight > 0:
         positive_context = get_content_scores(
-            liked_ids,
+            indexed_liked_ids,
             index,
             context_weights,
         )
 
         if positive_context is not None:
             final_scores += (
-                CONTEXT_LIKE_WEIGHT * positive_context
+                CONTEXT_LIKE_WEIGHT
+                * learned_weight
+                * positive_context
             )
 
     # Increase negative influence gradually over the first five dislikes.

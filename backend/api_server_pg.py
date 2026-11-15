@@ -12,7 +12,11 @@ from dotenv import load_dotenv
 from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload, PaginatedMediaResponse, FeedbackPayload, AccountOut
 from models import Media, User, UserAuthAccount, UserMediaFeedback, LatestFeedback
 from database import sessionLocal
-from helpers import media_to_api_item
+from helpers import (
+    get_preference_categories,
+    media_to_api_item,
+    normalize_preferred_genres,
+)
 from recommender import get_recommendations
 
 @asynccontextmanager
@@ -423,7 +427,7 @@ def user_onboarding(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user.preferred_genres = genre_list
+    user.preferred_genres = normalize_preferred_genres(genre_list)
     user.genre_onboarding_completed = True
 
     db.commit()
@@ -441,7 +445,7 @@ def get_onboarding(
         raise HTTPException(status_code=404, detail="User not found")
 
     return {
-        "preferred_genres": user.preferred_genres,
+        "preferred_genres": normalize_preferred_genres(user.preferred_genres),
         "onboarding_completed": user.genre_onboarding_completed,
     }
 
@@ -450,7 +454,7 @@ def get_stats(user_id: int,
               _ : bool = Depends(require_internal_secret),
               db : Session = Depends(get_db)):
     statement = (
-        select(Media.genres).join(
+        select(Media.genres, Media.is_anime).join(
             UserMediaFeedback,
             UserMediaFeedback.media_id == Media.id,
         ).where(
@@ -459,11 +463,11 @@ def get_stats(user_id: int,
         )
     )
 
-    genre_list = db.scalars(statement).all()
+    media_rows = db.execute(statement).all()
 
     genre_dict = {}
-    for genres in genre_list:
-        for genre in genres:
+    for media in media_rows:
+        for genre in get_preference_categories(media.genres, media.is_anime):
             if genre not in genre_dict:
                 genre_dict[genre] = 1
             else:

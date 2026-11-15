@@ -11,7 +11,7 @@ import { useSession } from "next-auth/react";
 const RECOMMENDATION_BATCH_SIZE = 3;
 
 const GENRES = [
-  "Action", "Adventure", "Animation", "Comedy", "Crime",
+  "Action", "Adventure", "Anime", "Other Animation", "Comedy", "Crime",
   "Documentary", "Drama", "Family", "Fantasy", "History", "Horror", "Kids",
   "Music", "Mystery", "News", "Reality", "Romance", "Science Fiction",
    "Soap", "Talk", "Thriller", "TV Movie", "War",

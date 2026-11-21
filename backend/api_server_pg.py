@@ -4,16 +4,20 @@ from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select, case, desc, func
+from sqlalchemy.dialects.postgresql import insert
 from contextlib import asynccontextmanager
 from recommender import get_recommendations, build_recommender_index
 
 from dotenv import load_dotenv
 
 from schemas import MediaItem,OAuthLoginIn,UserOut,LikePayload, PaginatedMediaResponse, FeedbackPayload, AccountOut
+from schemas import MediaDisplayIn, MediaDisplayOut
 from models import Media, User, UserAuthAccount, UserMediaFeedback, LatestFeedback
+from models import MediaDisplay
 from database import sessionLocal
 from helpers import (
     get_preference_categories,
+    get_recent_displays,
     media_to_api_item,
     normalize_preferred_genres,
 )
@@ -326,6 +330,72 @@ def recommended_media(
         )
     return [media_to_api_item(media) for media in recommendations]
 
+
+@api.post("/api/displays/{user_id}", response_model=dict[str, bool])
+def record_display(
+    user_id: int,
+    payload: MediaDisplayIn,
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    if db.get(User, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if db.get(Media, payload.media_id) is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    statement = (
+        insert(MediaDisplay)
+        .values(
+            user_id=user_id,
+            media_id=payload.media_id,
+            event_id=payload.event_id,
+        )
+        .on_conflict_do_nothing(
+            constraint="uq_media_displays_user_event",
+        )
+        .returning(MediaDisplay.id)
+    )
+
+    display_id = db.scalar(statement)
+
+    if display_id is None:
+        existing_media_id = db.scalar(
+            select(MediaDisplay.media_id).where(
+                MediaDisplay.user_id == user_id,
+                MediaDisplay.event_id == payload.event_id,
+            )
+        )
+        if existing_media_id != payload.media_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Event ID already belongs to another media item",
+            )
+
+    db.commit()
+    return {"ok": True}
+
+
+@api.get("/api/displays/{user_id}", response_model=list[MediaDisplayOut])
+def recent_displays(
+    user_id: int,
+    limit: int = Query(default=20, ge=1, le=100),
+    _: bool = Depends(require_internal_secret),
+    db: Session = Depends(get_db),
+):
+    if db.get(User, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    displays = get_recent_displays(user_id=user_id, db=db, limit=limit)
+    return [
+        MediaDisplayOut(
+            id=display.id,
+            media_id=display.media_id,
+            event_id=display.event_id,
+            displayed_at=display.displayed_at,
+        )
+        for display in displays
+    ]
 
 @api.post("/api/feedback")
 def save_feedback(

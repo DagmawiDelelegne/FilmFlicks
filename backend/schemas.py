@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Literal
 from datetime import datetime
+from uuid import UUID
 MediaType = Literal["movie","tv"]
 OAuthProvider = Literal["google","github","instagram"]
 
@@ -50,3 +51,15 @@ class FeedbackPayload(BaseModel):
     user_id: int
     media_id: int
     feedback: Literal["like", "dislike"]
+
+
+class MediaDisplayIn(BaseModel):
+    media_id: int = Field(gt=0)
+    event_id: UUID
+
+
+class MediaDisplayOut(BaseModel):
+    id: int
+    media_id: int
+    event_id: UUID
+    displayed_at: datetime

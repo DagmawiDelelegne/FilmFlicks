@@ -1,4 +1,5 @@
 from datetime import datetime, date
+from uuid import UUID
 
 from sqlalchemy import (
     Boolean, 
@@ -12,6 +13,8 @@ from sqlalchemy import (
     CheckConstraint,
     text,
     Date,
+    Index,
+    Uuid,
     )
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -104,6 +107,40 @@ class Media(Base):
         CheckConstraint("media_type IN ('movie', 'tv')", name="valid_media_type"),
         UniqueConstraint("media_type", "tmdb_id", name="unique_tmdb_media"),
     )
+
+class MediaDisplay(Base):
+    __tablename__ = "media_displays"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    media_id: Mapped[int] = mapped_column(
+        ForeignKey("media.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    displayed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "event_id",
+            name="uq_media_displays_user_event",
+        ),
+        Index(
+            "ix_media_displays_user_recent",
+            "user_id",
+            "displayed_at",
+            "id",
+        ),
+    )
+
 
 class LatestFeedback(Base):
     __tablename__ = "latest_feedback"

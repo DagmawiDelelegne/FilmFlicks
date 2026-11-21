@@ -12,6 +12,27 @@ export async function getRec(limit = 3, exclude_ids: number[]): Promise<MediaIte
   return res.json();
 }
 
+export async function recordMediaDisplay(
+  mediaId: number,
+  eventId: string,
+): Promise<void> {
+  const res = await fetch("/api/displays", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      media_id: mediaId,
+      event_id: eventId,
+    }),
+    keepalive: true,
+  });
+
+  if (!res.ok) {
+    throw new Error(`recordMediaDisplay failed: ${res.status}`);
+  }
+}
+
 export async function sendFeedback(payload: FeedbackPaylaod): Promise<void> {
     const res = await fetch(`/api/feedback`, 
                 {method : "POST", 

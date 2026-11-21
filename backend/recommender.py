@@ -1,3 +1,4 @@
+from datetime import date
 import random
 
 import numpy as np
@@ -21,6 +22,8 @@ ONBOARDING_PRIOR_STRENGTH = 20
 DISLIKE_WEIGHT = 0.25
 CONTEXT_LIKE_WEIGHT = 0.10
 CONTEXT_DISLIKE_WEIGHT = 0.05
+RELEASE_PERIOD_WEIGHT = 0.08
+RELEASE_PERIOD_PRIOR = 5.0
 
 CONTENT_WEIGHTS = {
     "genre_matrix": 0.35,
@@ -54,6 +57,36 @@ def normalize_keywords(keywords: list[str]) -> list[str]:
     })
 
 
+def build_release_period_matrix(release_dates: list[date | None]):
+    """Represent release years using overlapping decade anchors."""
+    today = date.today()
+    years = np.array([
+        value.year if value is not None and value <= today else 0
+        for value in release_dates
+    ], dtype=np.int32)
+    valid = years > 0
+
+    if not np.any(valid):
+        return (
+            np.zeros((len(years), 0), dtype=np.float32),
+            np.array([], dtype=np.int32),
+        )
+
+    first_period = int(years[valid].min() // 10 * 10)
+    last_period = int(years[valid].max() // 10 * 10 + 10)
+    periods = np.arange(first_period, last_period + 1, 10)
+    matrix = np.zeros((len(years), len(periods)), dtype=np.float32)
+
+    for row in np.flatnonzero(valid):
+        year = int(years[row])
+        lower = (year - first_period) // 10
+        upper_weight = (year % 10) / 10
+        matrix[row, lower] = 1 - upper_weight
+        matrix[row, lower + 1] = upper_weight
+
+    return matrix, periods
+
+
 def build_recommender_index(db: Session):
     rows = db.execute(
         select(
@@ -64,6 +97,7 @@ def build_recommender_index(db: Session):
             Media.is_anime,
             Media.vote_average,
             Media.vote_count,
+            Media.release_date,
         )
         .where(Media.adult.is_(False))
         .order_by(Media.id)
@@ -161,6 +195,12 @@ def build_recommender_index(db: Session):
         "context_encoder": context_encoder,
         "context_matrix": context_matrix,
     }
+
+    release_matrix, release_periods = build_release_period_matrix(
+        [row.release_date for row in rows]
+    )
+    index["release_period_matrix"] = release_matrix
+    index["release_periods"] = release_periods
 
     ratings = np.clip(
     np.array([row.vote_average or 0 for row in rows], dtype=np.float32),
@@ -266,6 +306,48 @@ def get_content_scores(
         return None
 
     return combined / active_weight
+
+
+def get_release_period_scores(
+    liked_ids: set[int],
+    disliked_ids: set[int],
+    index: dict,
+):
+    """Compare each period's acceptance rate with the user's overall rate."""
+    matrix = index["release_period_matrix"]
+    scores = np.zeros(len(index["media_ids"]), dtype=np.float32)
+
+    if matrix.shape[1] == 0:
+        return scores
+
+    row_by_id = index["row_by_id"]
+    has_date = matrix.sum(axis=1) > 0
+    liked_rows = [
+        row_by_id[media_id]
+        for media_id in liked_ids
+        if media_id in row_by_id and has_date[row_by_id[media_id]]
+    ]
+    disliked_rows = [
+        row_by_id[media_id]
+        for media_id in disliked_ids
+        if media_id in row_by_id and has_date[row_by_id[media_id]]
+    ]
+
+    if not liked_rows or not disliked_rows:
+        return scores
+
+    likes_by_period = matrix[liked_rows].sum(axis=0)
+    dislikes_by_period = matrix[disliked_rows].sum(axis=0)
+    decisions_by_period = likes_by_period + dislikes_by_period
+    overall_like_rate = len(liked_rows) / (len(liked_rows) + len(disliked_rows))
+
+    # Sparse periods shrink toward the user's baseline; unrated periods stay
+    # neutral. More exposure alone does not establish a stronger preference.
+    period_preferences = (
+        likes_by_period - overall_like_rate * decisions_by_period
+    ) / (decisions_by_period + RELEASE_PERIOD_PRIOR)
+
+    return np.asarray(matrix @ period_preferences, dtype=np.float32)
 
 
 def select_recommendation_rows(
@@ -506,6 +588,13 @@ def get_recommendations(
     final_scores += np.where(
         final_scores > 0,
         0.05 * index["quality_scores"],
+        0.0,
+    )
+
+    release_scores = get_release_period_scores(liked_ids, disliked_ids, index)
+    final_scores += np.where(
+        final_scores > 0,
+        RELEASE_PERIOD_WEIGHT * release_scores,
         0.0,
     )
 

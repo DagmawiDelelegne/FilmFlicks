@@ -4,11 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { MediaCard } from "@/components/MediaCard";
 import { DetailsCard } from "@/components/DetailsCard";
 import { Heart, X, ArrowRight, RotateCcw, Undo2, Info } from "lucide-react";
-import { getRec, sendFeedback, getOnboarding, saveOnboarding, undoFeedback } from "@/lib/api";
+import { getRec, sendFeedback, getOnboarding, saveOnboarding, undoFeedback, recordMediaDisplay } from "@/lib/api";
 import type { MediaItem, OnboardingStatus } from "@/lib/types/media";
 import { useSession } from "next-auth/react";
 
 const RECOMMENDATION_BATCH_SIZE = 3;
+
+type DisplayEvent = {
+  userId: string;
+  mediaId: number;
+  eventId: string;
+  recorded: boolean;
+  inFlight: boolean;
+};
 
 const GENRES = [
   "Action", "Adventure", "Anime", "Other Animation", "Comedy", "Crime",
@@ -29,6 +37,8 @@ async function fetchRecommendationBatch(existingIds = new Set<number>()): Promis
 export default function DiscoveryPage() {
   const { data: session, status } = useSession();
   const detailsDialog = useRef<HTMLDialogElement>(null);
+  const cardArea = useRef<HTMLDivElement>(null);
+  const currentDisplay = useRef<DisplayEvent | null>(null);
 
   const [item, setItem] = useState<MediaItem | null>(null);
   const [queue, setQueue] = useState<MediaItem[]>([]);
@@ -44,6 +54,79 @@ export default function DiscoveryPage() {
   const [lastFeedbackItem, setLastFeedbackItem] = useState<MediaItem | null>(
     null
   );
+  const mediaId = item?.id ?? null;
+  const userId = session?.user?.id ? String(session.user.id) : null;
+
+  useEffect(() => {
+    if (!userId || mediaId === null) {
+      currentDisplay.current = null;
+      return;
+    }
+
+    const element = cardArea.current;
+    if (loading || error || !element) return;
+
+    const previous = currentDisplay.current;
+    const event: DisplayEvent =
+      previous && previous.userId === userId && previous.mediaId === mediaId
+        ? previous
+        : {
+            userId,
+            mediaId,
+            eventId: crypto.randomUUID(),
+            recorded: false,
+            inFlight: false,
+          };
+
+    currentDisplay.current = event;
+    let cancelled = false;
+    let inView = false;
+
+    async function recordVisibleCard() {
+      if (
+        cancelled ||
+        !inView ||
+        document.visibilityState !== "visible" ||
+        event.recorded ||
+        event.inFlight
+      ) {
+        return;
+      }
+
+      event.inFlight = true;
+      try {
+        await recordMediaDisplay(event.mediaId, event.eventId);
+        event.recorded = true;
+      } catch (err) {
+        console.warn("Failed to record displayed media:", err);
+      } finally {
+        event.inFlight = false;
+      }
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        inView = entry.isIntersecting && entry.intersectionRatio >= 0.5;
+        void recordVisibleCard();
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(element);
+
+    document.addEventListener("visibilitychange", recordVisibleCard);
+    window.addEventListener("online", recordVisibleCard);
+    const retryTimer = window.setInterval(() => {
+      void recordVisibleCard();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      window.clearInterval(retryTimer);
+      document.removeEventListener("visibilitychange", recordVisibleCard);
+      window.removeEventListener("online", recordVisibleCard);
+    };
+  }, [userId, mediaId, loading, error]);
 
   useEffect(() => {
     let cancelled = false;
@@ -274,7 +357,7 @@ export default function DiscoveryPage() {
       aria-label="Discovery"
       className="mx-auto flex h-[calc(100dvh-5rem)] w-full max-w-lg flex-col gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-white"
     >
-      <div className="min-h-0 flex-1">
+      <div ref={cardArea} className="min-h-0 flex-1">
         <MediaCard item={item} disableLink layout="discovery" />
       </div>
 

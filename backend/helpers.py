@@ -1,7 +1,28 @@
 from datetime import date
 
-from models import Media
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from models import Media, MediaDisplay
 from schemas import MediaItem
+
+
+def get_recent_displays(
+    user_id: int,
+    db: Session,
+    limit: int = 20,
+) -> list[MediaDisplay]:
+    statement = (
+        select(MediaDisplay)
+        .where(MediaDisplay.user_id == user_id)
+        .order_by(
+            MediaDisplay.displayed_at.desc(),
+            MediaDisplay.id.desc(),
+        )
+        .limit(limit)
+    )
+
+    return list(db.scalars(statement).all())
 
 
 def get_preference_categories(

@@ -152,3 +152,55 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  aws_connection:
+    name: Test EC2 connection
+    needs: [publish]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/pre_deployment_prep'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+
+    env:
+      AWS_REGION: us-east-2
+      EC2_INSTANCE_ID: i-09bf38068012984d0
+      AWS_PAGER: ""
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "662875145360"
+
+      - name: Check AWS identity
+        run: aws sts get-caller-identity --query Arn --output text
+
+      - name: Run whoami on EC2
+        shell: bash
+        run: |
+          command_id=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters '{"commands":["whoami"]}' \
+            --query "Command.CommandId" \
+            --output text)
+
+          if ! aws ssm wait command-executed \
+            --command-id "$command_id" \
+            --instance-id "$EC2_INSTANCE_ID"; then
+            aws ssm get-command-invocation \
+              --command-id "$command_id" \
+              --instance-id "$EC2_INSTANCE_ID"
+            exit 1
+          fi
+
+          aws ssm get-command-invocation \
+            --command-id "$command_id" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query "StandardOutputContent" \
+            --output text

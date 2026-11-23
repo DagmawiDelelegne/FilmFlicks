@@ -17,7 +17,7 @@ services:
       retries: 10
 
   backend:
-    image: filmflicks-backend:latest
+    image: ghcr.io/dagmawidelelegne/filmflicks-backend:${IMAGE_TAG:?Set IMAGE_TAG}
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
@@ -26,9 +26,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3).close()
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   frontend:
-    image: filmflicks-frontend:latest
+    image: ghcr.io/dagmawidelelegne/filmflicks-frontend:${IMAGE_TAG:?Set IMAGE_TAG}
     restart: unless-stopped
     environment:
       BACKEND_URL: "http://backend:8000"
@@ -39,6 +51,20 @@ services:
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:?Set AUTH_GOOGLE_SECRET}
     depends_on:
       - backend
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch("http://127.0.0.1:3000/api/auth/session",
+          { signal: AbortSignal.timeout(3000) })
+          .then(response => process.exit(response.ok ? 0 : 1))
+          .catch(() => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   caddy:
     image: caddy:2

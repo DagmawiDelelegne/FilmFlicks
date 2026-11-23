@@ -106,7 +106,12 @@ export function MediaCard({ item, onClick, disableLink = false, layout = "defaul
       </div>
 
       <div className="absolute bottom-0 w-full p-6">
-        <h2 className="text-4xl font-bold leading-tight">{item.title}</h2>
+        <h2
+          className="line-clamp-2 break-words text-lg leading-6 font-semibold"
+          title={item.title}
+        >
+          {item.title}
+        </h2>
 
         <p className="mt-1 text-sm text-white/70">
           {getMediaDisplayType(item)}

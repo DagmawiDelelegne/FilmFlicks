@@ -62,6 +62,11 @@ def get_db():
     finally:
         db.close()
 
+@api.get("/health")
+def health(db: Session = Depends(get_db)):
+    db.execute(select(1))
+    return {"status": "ok"}
+
 """
 OAuth for user sign in/up
 currently only allowes an email to be linked to one provider .

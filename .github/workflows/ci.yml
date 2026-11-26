@@ -52,6 +52,9 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      - name: Check deployment script syntax
+        run: bash -n ../scripts/deploy.sh
+
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt
 
@@ -153,12 +156,16 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-  aws_connection:
-    name: Test EC2 connection
+  deploy:
+    name: Deploy to EC2
     needs: [publish]
     if: github.event_name == 'push' && github.ref == 'refs/heads/pre_deployment_prep'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
+
+    concurrency:
+      group: filmflicks-production
+      cancel-in-progress: false
 
     permissions:
       contents: read
@@ -177,30 +184,82 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: "662875145360"
 
-      - name: Check AWS identity
-        run: aws sts get-caller-identity --query Arn --output text
-
-      - name: Run whoami on EC2
+      - name: Deploy through Systems Manager
         shell: bash
         run: |
+          set -euo pipefail
+
+          latest_sha=$(git ls-remote --exit-code \
+            "https://github.com/$GITHUB_REPOSITORY.git" "$GITHUB_REF" | cut -f1)
+
+          if [[ "$latest_sha" != "$GITHUB_SHA" ]]; then
+            echo "A newer commit exists on this branch. Skipping this deployment."
+            exit 0
+          fi
+
+          remote_script=$(cat <<EOF
+          set -eu
+          script_file=\$(mktemp /tmp/filmflicks-deploy.XXXXXX.sh)
+          trap 'rm -f -- "\$script_file"' EXIT
+          curl --fail --silent --show-error --location \
+            --connect-timeout 10 --max-time 60 \
+            "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/scripts/deploy.sh" \
+            --output "\$script_file"
+          chmod 644 "\$script_file"
+          runuser -u ubuntu -- bash "\$script_file" "$GITHUB_SHA"
+          EOF
+          )
+
+          jq -n --arg script "$remote_script" \
+            '{commands: [$script], executionTimeout: ["900"]}' \
+            > "$RUNNER_TEMP/ssm-deploy.json"
+
           command_id=$(aws ssm send-command \
             --instance-ids "$EC2_INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters '{"commands":["whoami"]}' \
+            --parameters "file://$RUNNER_TEMP/ssm-deploy.json" \
+            --timeout-seconds 60 \
             --query "Command.CommandId" \
             --output text)
 
-          if ! aws ssm wait command-executed \
-            --command-id "$command_id" \
-            --instance-id "$EC2_INSTANCE_ID"; then
-            aws ssm get-command-invocation \
-              --command-id "$command_id" \
-              --instance-id "$EC2_INSTANCE_ID"
-            exit 1
-          fi
+          echo "SSM command: $command_id"
 
-          aws ssm get-command-invocation \
-            --command-id "$command_id" \
-            --instance-id "$EC2_INSTANCE_ID" \
-            --query "StandardOutputContent" \
-            --output text
+          for attempt in $(seq 1 200); do
+            if result=$(aws ssm get-command-invocation \
+              --command-id "$command_id" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --output json 2>"$RUNNER_TEMP/ssm-error.log"); then
+
+              status=$(jq -r '.Status' <<< "$result")
+              echo "SSM status: $status"
+
+              case "$status" in
+                Success)
+                  jq -r '.StandardOutputContent' <<< "$result"
+                  exit 0
+                  ;;
+                Pending|InProgress|Delayed|Cancelling)
+                  ;;
+                *)
+                  jq -r '.Status, .StandardOutputContent, .StandardErrorContent' <<< "$result"
+                  exit 1
+                  ;;
+              esac
+            elif ! grep -q 'InvocationDoesNotExist' "$RUNNER_TEMP/ssm-error.log"; then
+              cat "$RUNNER_TEMP/ssm-error.log" >&2
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+          echo "Timed out waiting for the deployment result." >&2
+          exit 1
+
+      - name: Check public HTTPS endpoint
+        run: |
+          curl --fail --silent --show-error --location \
+            --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 5 --max-time 10 \
+            --output /dev/null \
+            "https://filmflicks.dagmawidelelegne.com/api/auth/session"

@@ -262,6 +262,23 @@ export default function AccountPage() {
           </div>
         </dialog>
       </section>
+
+      <footer className="border-t border-white/10 pt-5">
+        <nav
+          aria-label="Information links"
+          className="flex flex-wrap gap-6"
+        >
+          <Link
+            href="/about"
+            className="text-sm text-purple-300 hover:underline
+                       focus-visible:outline-2
+                       focus-visible:outline-offset-4
+                       focus-visible:outline-purple-400"
+          >
+            About FilmFlicks
+          </Link>
+        </nav>
+      </footer>
     </section>
   );
 }

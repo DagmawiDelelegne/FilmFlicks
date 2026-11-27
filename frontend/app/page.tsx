@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import LoginButtons from "@/components/LoginButtons";
+import Link from "next/link";
 
 export default function Home() {
 
@@ -25,8 +26,18 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white flex items-center justify-center">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black px-6 text-center text-white">
       <LoginButtons />
+      <p className="max-w-md text-sm leading-6 text-white/70">
+        Discover movies, TV shows, and anime based on your interests.
+      </p>
+
+      <Link
+        href="/about"
+        className="text-sm text-purple-300 hover:underline"
+      >
+        About FilmFlicks
+      </Link>
     </main>
   );
 }
